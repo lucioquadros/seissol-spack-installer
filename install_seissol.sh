@@ -13,7 +13,7 @@
 #  --log FILE           Custom log file path
 #                       (default: ~/seissol_install_YYYYMMDD_HHMMSS.log)
 #  --gcc-14             Build gcc-14 from source / export it to PATH
-#  -y, --yes            Skip the confirmation prompt 
+#  -y, --yes            Skip the confirmation prompt
 #  -h, --help           Show usage and exit
 # ===========================================================================
 
@@ -264,7 +264,7 @@ install_packages() {
             DNF_MAJOR_VER=$(dnf --version 2>/dev/null | head -n 1 | \
                             grep -oE '[0-9]+' | head -n 1)
 
-	    log_info "Enabling EPEL and CRB repositories (these persist after installation)"
+            log_info "Enabling EPEL and CRB repositories (these persist after installation)"
             ${SUDO} dnf install -y epel-release 2>&1 | tee -a "${LOG_FILE}" || true
             ${SUDO} dnf config-manager --set-enabled crb 2>&1 | tee -a "${LOG_FILE}" || \
                 ${SUDO} dnf config-manager --set-enabled powertools \
@@ -300,8 +300,8 @@ install_packages() {
             ;;
 
         arch)
-	    ${SUDO} pacman -Sy --noconfirm 2>&1 | tee -a "${LOG_FILE}"
-	    ${SUDO} pacman -S --noconfirm --needed "${ARCH_PKGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
+            ${SUDO} pacman -Sy --noconfirm 2>&1 | tee -a "${LOG_FILE}"
+            ${SUDO} pacman -S --noconfirm --needed "${ARCH_PKGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
             ;;
     esac
 
@@ -386,45 +386,44 @@ setup_spack() {
     LIMIT_GCC_V="${LIMIT_GCC_V//[[:space:]]/}"
 
     if [[ -z "${LIMIT_GCC_V}" ]]; then
-    log_warn "No GCC < 15 found on this system."
-    log_warn "GCC 15+ defaults to C23 (-std=gnu23), which may break"
-    log_warn "some packages in SeisSol's dependency tree (e.g., netcdf, libxsmm)."
-    log_warn "Consider re-running with --gcc-14 to build GCC 14 from source."
-    echo ""
+        log_warn "No GCC < 15 found on this system."
+        log_warn "GCC 15+ defaults to C23 (-std=gnu23), which may break"
+        log_warn "some packages in SeisSol's dependency tree (e.g., netcdf, libxsmm)."
+        log_warn "Consider re-running with --gcc-14 to build GCC 14 from source."
+        echo ""
 
-    if [[ "${AUTO_YES}" == "true" ]]; then
-        log_warn "Auto-confirmed via --yes flag. Continuing with no compiler pin."
-    elif [[ ! -t 0 ]]; then
-        die "No GCC < 15 found and no interactive terminal to prompt. " \
-            "Re-run with --gcc-14 or pass -y / --yes to continue anyway."
+        if [[ "${AUTO_YES}" == "true" ]]; then
+            log_warn "Auto-confirmed via --yes flag. Continuing with no compiler pin."
+        elif [[ ! -t 0 ]]; then
+            die "No GCC < 15 found and no interactive terminal to prompt. Re-run with --gcc-14 or pass -y / --yes to continue anyway."
+        else
+            local reply
+            while true; do
+                read -r -p "  Continue without a GCC version pin? [yes/no]: " reply
+                case "${reply,,}" in
+                    yes|y)
+                        echo ""
+                        log_warn "Continuing. Build failures are possible."
+                        echo ""
+                        break
+                        ;;
+                    no|n)
+                        echo ""
+                        echo "  Installation stopped. Re-run with --gcc-14 to resolve this."
+                        exit 0
+                        ;;
+                    *)
+                        echo "  Please type 'yes' or 'no'."
+                        ;;
+                esac
+            done
+        fi
+
+        GCC_V=""
     else
-        local reply
-        while true; do
-            read -r -p "  Continue without a GCC version pin? [yes/no]: " reply
-            case "${reply,,}" in
-                yes|y)
-                    echo ""
-                    log_warn "Continuing. Build failures are possible."
-                    echo ""
-                    break
-                    ;;
-                no|n)
-                    echo ""
-                    echo "  Installation stopped. Re-run with --gcc-14 to resolve this."
-                    exit 0
-                    ;;
-                *)
-                    echo "  Please type 'yes' or 'no'."
-                    ;;
-            esac
-        done
+        log_info "Pinning ${LIMIT_GCC_V} to SeisSol build."
+        GCC_V="%${LIMIT_GCC_V}"
     fi
-
-    GCC_V=""
-else
-    log_info "Pinning ${LIMIT_GCC_V} to SeisSol build."
-    GCC_V="%${LIMIT_GCC_V}"
-fi
 
     log_ok "Spack is ready."
 }

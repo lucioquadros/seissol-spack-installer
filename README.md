@@ -77,7 +77,7 @@ Options:
  --log FILE           Custom log file path
                       (default: ~/seissol_install_YYYYMMDD_HHMMSS.log)
  --gcc-14             Build gcc-14 from source / export it to PATH
- -y, --yes            Skip the confirmation prompt 
+ -y, --yes            Skip the confirmation prompt
  -h, --help           Show usage and exit
 ```
 
@@ -101,7 +101,7 @@ Options:
 ```
 
 > **.conf file note:** --params-file is optional, the program defaults to
-> looking for 'seissol_params.conf' on main directory.
+> looking for 'seissol_params.conf' in the main directory.
 
 ---
 
@@ -168,7 +168,7 @@ See [Build Parameter File](#build-parameter-file) for parameter references.
 source ~/spack/share/spack/setup-env.sh
 spack env activate seissol-env
 
-# Verify SeisSol binnaries
+# Verify SeisSol binaries
 which SeisSol_Release_*
 ```
 ---

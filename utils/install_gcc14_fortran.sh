@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # install_gcc14_fortran.sh - A script to download, build, and install GCC & GFortran 14
 set -euo pipefail
 
