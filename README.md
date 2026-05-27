@@ -131,6 +131,20 @@ Full parameter reference:
 1. <https://seissol.readthedocs.io/en/latest/build-parameters.html>
 2. <https://packages.spack.io/package.html?name=seissol>
 
+### Implicit dependency pins
+
+In addition to the variants you set in the parameter file, the installer
+appends two constraints to the assembled Spack spec to work around known
+incompatibilities in SeisSol's dependency tree:
+
+| Constraint | Reason | When applied |
+|---|---|---|
+| `^netcdf-c@4.9:` | `netcdf-c` 4.8.x fails to build with C23 (default in GCC 15+) | Only when the `netcdf` variant is **not** disabled in the params file. Setting `netcdf = false` skips this pin. |
+| `^py-matplotlib@3.5:` | `py-matplotlib` 3.2.x is incompatible with FreeType ≥ 2.11 | Always added. Spack ignores `^`-constraints for dependencies that aren't actually in the resolved DAG, so this is a no-op when matplotlib isn't pulled in. |
+
+If a future SeisSol or Spack release fixes these upstream, the pins can be
+removed from `install_seissol.sh` (search for `netcdf-c` and `py-matplotlib`).
+
 ---
 
 ## Quick Start

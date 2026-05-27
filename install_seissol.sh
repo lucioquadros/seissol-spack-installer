@@ -27,11 +27,17 @@ SPACK_DIR="${HOME}/spack"
 SPACK_ENV_NAME="seissol-env"
 JOBS=""                     # empty = auto-detect
 LOG_FILE="${HOME}/seissol_install_$(date +%Y%m%d_%H%M%S).log"
-SPACK_BRANCH="develop"
+SPACK_BRANCH="releases/v1.1"
 SEISSOL_PARAMS_FILE="seissol_params.conf"
 BUILD_GCC=false
 GCC_V=""
 AUTO_YES=false
+
+# Populated by GCC helper
+GCC_HELPER=""
+GCC_VERSION=""
+GCC_MAJOR=""
+GCC_PREFIX=""
 
 # ===========================================================================
 # COLOUR / LOGGING
@@ -91,16 +97,17 @@ confirm_with_user() {
     echo -e "  ${BOLD}Changes requiring sudo (system-wide):${NC}"
     echo -e "   1. Install Spack requirements and compiler packages via your package"
     echo -e "      manager (apt / dnf / zypper / pacman)."
-    echo -e "   2. ${BOLD}${YELLOW}[Arch Linux only]${NC} Run a full system package database sync"
-    echo -e "      (pacman -Sy). Package installation is targeted, but the"
-    echo -e "      database sync may surface upgrades for existing packages."
+    echo -e "   2. ${BOLD}${YELLOW}[Arch Linux only]${NC} Run a full system upgrade"
+    echo -e "      (pacman -Syu). Arch does not support partial upgrades, so this is"
+    echo -e "      required to keep the system consistent. ALL installed packages"
+    echo -e "      will be upgraded to their latest versions."
     echo -e "   3. ${BOLD}${YELLOW}[RHEL / AlmaLinux / Rocky only]${NC} Permanently enable the EPEL"
     echo -e "      and CRB (CodeReady Builder) package repositories. These"
     echo -e "      remain enabled after the installer finishes."
-    echo -e "   4. ${BOLD}${YELLOW}[optional --gcc-14 flag only]${NC} Build GCC 14.2.0 from source"
-    echo -e "      and install it to /usr/local/gcc-14.2.0. This installation"
+    echo -e "   4. ${BOLD}${YELLOW}[optional --gcc-14 flag only]${NC} Build GCC ${GCC_VERSION} from source"
+    echo -e "      and install it to ${GCC_PREFIX}. This installation"
     echo -e "      persists after the script finishes and has no automatic"
-    echo -e "      uninstall. To remove it manually: rm -rf /usr/local/gcc-14.2.0"
+    echo -e "      uninstall. To remove it manually: rm -rf ${GCC_PREFIX}"
     echo ""
     echo -e "  ${BOLD}Changes to your home directory (no sudo):${NC}"
     echo -e "   5. Clone Spack from GitHub and install SeisSol, all its"
@@ -110,6 +117,9 @@ confirm_with_user() {
     echo -e "      be removed at any time with: rm -rf ~/spack ~/.spack"
     echo -e "   6. Append a Spack activation line to ${BOLD}~/.bashrc${NC} or ${BOLD}~/.zshrc${NC}"
     echo -e "      so that Spack is available in new shells after installation."
+    echo -e "   7. ${BOLD}${YELLOW}[optional --gcc-14 flag only]${NC} Append a PATH and"
+    echo -e "      LD_LIBRARY_PATH line for ${GCC_PREFIX} to ${BOLD}~/.bashrc${NC} or"
+    echo -e "      ${BOLD}~/.zshrc${NC} so future shells can find the compiled GCC."
     echo ""
     echo -e "  ${BOLD}Notes:${NC}"
     echo -e "   - The installation is mostly unattended once confirmed."
@@ -158,12 +168,12 @@ confirm_with_user() {
 OS_ID=""
 OS_VERSION=""
 OS_FAMILY=""
-IS_WSL=false # <- not really used, maybe remove?
 
 detect_os() {
     log_step "Detecting operating system"
 
     if [[ -f /etc/os-release ]]; then
+        # shellcheck source=/dev/null
         source /etc/os-release
         OS_ID="${ID:-unknown}"
         OS_VERSION="${VERSION_ID:-0}"
@@ -173,12 +183,7 @@ detect_os() {
         die "Cannot detect OS - /etc/os-release not found."
     fi
 
-    if grep -qEi "(microsoft|wsl)" /proc/version 2>/dev/null; then
-        IS_WSL=true
-        log_info "WSL environment detected."
-    fi
-
-    log_info "OS: ${OS_ID} ${OS_VERSION}  (WSL: ${IS_WSL})"
+    log_info "OS: ${OS_ID} ${OS_VERSION}"
 
     case "${OS_ID}" in
         ubuntu|debian|linuxmint|pop|elementary|zorin|kali)
@@ -194,6 +199,23 @@ detect_os() {
         *)
             die "Unknown distro '${OS_ID}'. Aborted!" ;;
     esac
+}
+
+# ===========================================================================
+# GCC HELPER METADATA
+# ===========================================================================
+resolve_gcc_helper_metadata() {
+    GCC_HELPER="$(dirname "${BASH_SOURCE[0]}")/utils/install_gcc14_fortran.sh"
+    if [[ ! -f "${GCC_HELPER}" ]]; then
+        die "GCC helper not found at ${GCC_HELPER}. Re-clone the repository."
+    fi
+    GCC_VERSION=$(awk -F'"' '/^GCC_VERSION=/{print $2; exit}' "${GCC_HELPER}")
+    if [[ -z "${GCC_VERSION}" ]]; then
+        die "Could not parse GCC_VERSION from ${GCC_HELPER}"
+    fi
+    GCC_MAJOR="${GCC_VERSION%%.*}"
+    GCC_PREFIX="/usr/local/gcc-${GCC_VERSION}"
+    log_info "GCC helper version: ${GCC_VERSION} (major: ${GCC_MAJOR}, prefix: ${GCC_PREFIX})"
 }
 
 # ===========================================================================
@@ -300,8 +322,7 @@ install_packages() {
             ;;
 
         arch)
-            ${SUDO} pacman -Sy --noconfirm 2>&1 | tee -a "${LOG_FILE}"
-            ${SUDO} pacman -S --noconfirm --needed "${ARCH_PKGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
+             ${SUDO} pacman -Syu --noconfirm --needed "${ARCH_PKGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
             ;;
     esac
 
@@ -314,10 +335,10 @@ install_packages() {
 setup_spack() {
     log_section "Setting up Spack"
 
-    # Clone or update Spack                                               
+    # Clone or update Spack
     if [[ -d "${SPACK_DIR}/.git" ]]; then
         log_info "Spack already present at ${SPACK_DIR}. Pulling latest changes."
-        git -C "${SPACK_DIR}" fetch --depth=2 origin "${SPACK_BRANCH}" \
+        git -C "${SPACK_DIR}" fetch origin "${SPACK_BRANCH}" \
             2>&1 | tee -a "${LOG_FILE}"
         git -C "${SPACK_DIR}" checkout "${SPACK_BRANCH}" \
             2>&1 | tee -a "${LOG_FILE}"
@@ -325,7 +346,7 @@ setup_spack() {
             2>&1 | tee -a "${LOG_FILE}"
     else
         log_step "Cloning Spack (branch: ${SPACK_BRANCH})"
-        git clone --depth=2 --branch "${SPACK_BRANCH}" \
+        git clone --branch "${SPACK_BRANCH}" \
             https://github.com/spack/spack.git "${SPACK_DIR}" \
             2>&1 | tee -a "${LOG_FILE}"
     fi
@@ -333,11 +354,12 @@ setup_spack() {
     [[ -f "${SPACK_DIR}/share/spack/setup-env.sh" ]] || \
         die "Spack setup script not found at ${SPACK_DIR}/share/spack/setup-env.sh"
 
-    # Activate Spack in the current shell                                 
+    # Activate Spack in the current shell
     log_step "Activating Spack"
+    # shellcheck source=/dev/null
     source "${SPACK_DIR}/share/spack/setup-env.sh"
 
-    # Persist activation for future interactive shells                    
+    # Persist activation for future interactive shells
     local SPACK_INIT_LINE=". ${SPACK_DIR}/share/spack/setup-env.sh"
     local SHELL_RC=""
     if   [[ -f "${HOME}/.bashrc" ]]; then SHELL_RC="${HOME}/.bashrc"
@@ -349,22 +371,31 @@ setup_spack() {
           echo "${SPACK_INIT_LINE}"; } >> "${SHELL_RC}"
     fi
 
-    # Compiler detection                                                  
+    # Compiler detection
     log_step "Detecting compilers"
 
     if [[ "${BUILD_GCC}" == "true" ]]; then
-        export PATH="/usr/local/gcc-14.2.0/bin:${PATH}"
-        export LD_LIBRARY_PATH="/usr/local/gcc-14.2.0/lib64:${LD_LIBRARY_PATH:-}"
-        local GCC_SH
-        GCC_SH="$(dirname "${BASH_SOURCE[0]}")/utils/install_gcc14_fortran.sh"
-        if [[ ! -f "${GCC_SH}" || ! -x "${GCC_SH}" ]]; then
-            die "${GCC_SH} not found or not executable - check utils/"
+        export PATH="${GCC_PREFIX}/bin:${PATH}"
+        export LD_LIBRARY_PATH="${GCC_PREFIX}/lib64:${LD_LIBRARY_PATH:-}"
+        if [[ ! -f "${GCC_HELPER}" || ! -x "${GCC_HELPER}" ]]; then
+            die "${GCC_HELPER} not found or not executable - check utils/"
         fi
-        if ! command -v "gcc-14" &>/dev/null; then
-            log_info "Compiling gcc-14 from source"
-            "${GCC_SH}" 2>&1 | tee -a "${LOG_FILE}"
+        if ! command -v "gcc-${GCC_MAJOR}" &>/dev/null; then
+            log_info "Compiling gcc-${GCC_MAJOR} from source"
+            "${GCC_HELPER}" 2>&1 | tee -a "${LOG_FILE}"
         else
-            log_info "gcc-14 already compiled. Skipped."
+            log_info "gcc-${GCC_MAJOR} already compiled. Skipped."
+        fi
+
+        # Persist GCC PATH for future interactive shells
+        if [[ -n "${SHELL_RC}" ]] && ! grep -qF "${GCC_PREFIX}/bin" "${SHELL_RC}"; then
+            log_info "Adding gcc-${GCC_MAJOR} to PATH in ${SHELL_RC}"
+            {
+                echo ""
+                echo "# GCC ${GCC_VERSION} - added by install_seissol.sh"
+                echo "export PATH=\"${GCC_PREFIX}/bin:\$PATH\""
+                echo "export LD_LIBRARY_PATH=\"${GCC_PREFIX}/lib64:\${LD_LIBRARY_PATH:-}\""
+            } >> "${SHELL_RC}"
         fi
     fi
 
@@ -379,7 +410,8 @@ setup_spack() {
     local MAJOR_LIMIT=15
     local LIMIT_GCC_V
     LIMIT_GCC_V=$(printf '%s\n' "${SPACK_COMPILERS_OUT}" | \
-        grep -oE 'gcc@[0-9]+\.[0-9]+\.[0-9]+' | \
+        grep -oE 'gcc@=?[0-9]+\.[0-9]+\.[0-9]+' | \
+        sed 's/@=/@/' | \
         awk -F'@' -v limit="${MAJOR_LIMIT}" \
             '{split($2,v,"."); if(v[1]+0 < limit+0) print $0}' | \
         sort -V | tail -n 1)
@@ -439,8 +471,11 @@ parse_seissol_config() {
 
     log_step "Reading SeisSol build parameters from: ${config_file}"
 
-    local pkg_version="master"
+    local pkg_version="v1.3.2"
     SEISSOL_SPEC="seissol"
+
+    # Track variants the user explicitly disabled (false/no/off).
+    local -A DISABLED_VARIANTS=()
 
     local line_num=0
     while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
@@ -475,7 +510,10 @@ parse_seissol_config() {
             *)
                 case "${lower_val}" in
                     true|yes|on)   SEISSOL_SPEC+=" +${key}" ;;
-                    false|no|off)  SEISSOL_SPEC+=" ~${key}" ;;
+                    false|no|off)
+                        SEISSOL_SPEC+=" ~${key}"
+                        DISABLED_VARIANTS["${key}"]=1
+                        ;;
                     *)             SEISSOL_SPEC+=" ${key}=${raw_val}" ;;
                 esac
                 ;;
@@ -484,8 +522,16 @@ parse_seissol_config() {
 
     SEISSOL_SPEC="seissol@${pkg_version}${SEISSOL_SPEC#seissol} ${GCC_V}"
 
-    # netcdf-c 4.8.x is incompatible with C23
-    SEISSOL_SPEC+=" ^netcdf-c@4.9:"
+    # Workaround pins for C23 / FreeType incompatibilities in the dep tree.
+    # The netcdf-c pin is only added when the netcdf variant is still enabled;
+    # otherwise '~netcdf ^netcdf-c@4.9:' would be a contradiction for Spack.
+    # The matplotlib pin is kept unconditional.
+    if [[ -z "${DISABLED_VARIANTS[netcdf]:-}" ]]; then
+        # netcdf-c 4.8.x is incompatible with C23
+        SEISSOL_SPEC+=" ^netcdf-c@4.9:"
+    else
+        log_info "  netcdf variant disabled - skipping ^netcdf-c@4.9: pin"
+    fi
 
     # matplotlib 3.2.x is incompatible with FreeType >= 2.11
     SEISSOL_SPEC+=" ^py-matplotlib@3.5:"
@@ -590,6 +636,7 @@ main() {
     log_info "Log: ${LOG_FILE}"
 
     confirm_with_user
+    resolve_gcc_helper_metadata
     detect_os
     check_prerequisites
     mem_checks
