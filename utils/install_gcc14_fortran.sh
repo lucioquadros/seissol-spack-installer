@@ -24,7 +24,7 @@ echo "========================================"
 echo "  Building GCC & GFortran ${GCC_VERSION}"
 echo "========================================"
 
-echo "--- Running preinstall  checks..."
+echo "--- Running preinstall checks..."
 
 # sudo availability
 if ! command -v sudo &> /dev/null; then
@@ -104,7 +104,7 @@ echo "--- Extracting..."
 tar -xzf "gcc-${GCC_VERSION}.tar.gz"
 cd "gcc-${GCC_VERSION}"
 
-echo "--> Downloading internal prerequisites (GMP, MPFR, MPC)..."
+echo "--- Downloading internal prerequisites (GMP, MPFR, MPC)..."
 ./contrib/download_prerequisites
 
 # ---------------------------------------------------------------------------
