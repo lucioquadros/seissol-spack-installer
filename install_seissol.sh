@@ -18,7 +18,6 @@
 # ===========================================================================
 
 set -euo pipefail
-IFS=$'\n\t'
 
 # ===========================================================================
 # DEFAULT CONFIGURATION
@@ -471,11 +470,11 @@ parse_seissol_config() {
 
     log_step "Reading SeisSol build parameters from: ${config_file}"
 
-    local pkg_version="v1.3.2"
+    local pkg_version="master"
     SEISSOL_SPEC="seissol"
 
     # Track variants the user explicitly disabled (false/no/off).
-    local -A DISABLED_VARIANTS=()
+    local -A DISABLED_VARIANTS=() # <- remove?
 
     local line_num=0
     while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
@@ -526,15 +525,15 @@ parse_seissol_config() {
     # The netcdf-c pin is only added when the netcdf variant is still enabled;
     # otherwise '~netcdf ^netcdf-c@4.9:' would be a contradiction for Spack.
     # The matplotlib pin is kept unconditional.
-    if [[ -z "${DISABLED_VARIANTS[netcdf]:-}" ]]; then
-        # netcdf-c 4.8.x is incompatible with C23
-        SEISSOL_SPEC+=" ^netcdf-c@4.9:"
-    else
-        log_info "  netcdf variant disabled - skipping ^netcdf-c@4.9: pin"
-    fi
+    #if [[ -z "${DISABLED_VARIANTS[netcdf]:-}" ]]; then
+    #    # netcdf-c 4.8.x is incompatible with C23
+    #    SEISSOL_SPEC+=" ^netcdf-c@4.9:"
+    #else
+    #    log_info "  netcdf variant disabled - skipping ^netcdf-c@4.9: pin"
+    #fi
 
-    # matplotlib 3.2.x is incompatible with FreeType >= 2.11
-    SEISSOL_SPEC+=" ^py-matplotlib@3.5:"
+    ## matplotlib 3.2.x is incompatible with FreeType >= 2.11
+    #SEISSOL_SPEC+=" ^py-matplotlib@3.5:"
 
     log_ok "Spec assembled: ${SEISSOL_SPEC}"
 }
