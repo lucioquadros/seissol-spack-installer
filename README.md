@@ -22,9 +22,9 @@ file that mirrors SeisSol's own build parameters.
 
 - [Overview](#overview)
 - [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
 - [Installation Options](#installation-options)
 - [Build Parameter File](#build-parameter-file)
-- [Quick Start](#quick-start)
 - [License](#license)
 
 ---
@@ -59,6 +59,49 @@ All output is logged to a timestamped file in `$HOME` for later inspection.
 > **Low-RAM / GPU builds note:** on machines with 16 GB of RAM or less, large
 > builds can be a problem, e.g. a "cuda = true" build. If you have problems,
 > stage builds on disk by re-running with "--build-dir ${HOME}/spack/tmp".
+
+---
+
+## Quick Start
+
+### Installation
+
+```bash
+# 1. Clone this repository
+git clone https://github.com/lucioquadros/seissol-spack-installer.git
+cd seissol-spack-installer
+
+# 2. Make the installer executable
+chmod +x install_seissol.sh
+
+# 3. [OPTIONAL] Edit a parameter file
+$EDITOR seissol_params.conf  # adjust convergence_order, equations, etc. 
+
+# 4. Run the installer
+#    If this is your first run and you are unsure whether the system
+#    dependencies that Spack needs are already installed, add --install-deps
+./install_seissol.sh --install-deps
+```
+
+The first run downloads and compiles all dependencies. It may take several minutes
+depending on your hardware and internet connection. Even more if compiling GCC-14 from source ('--gcc-14' option).
+
+### After installation
+
+```bash
+# 5. Activate in a new shell
+source ~/spack/share/spack/setup-env.sh
+spack env activate seissol-env
+
+# 6. Verify SeisSol binaries (e.g.)
+compgen -c | grep "SeisSol_*"
+```
+
+> **SeisSol variants note:** multiple installations with different SeisSol build
+> parameters are possible. Rerun the script with the new parameters in your
+> configuration file. If you want to preserve both installations, create a new
+> environment via --spack-env <new_name>.  Spack will reuse the compatible
+> dependencies, so a new run will be faster.
 
 ---
 
@@ -149,49 +192,6 @@ Blank lines and lines starting with `#` are ignored. Inline comments
 Full parameter reference:
 1. <https://packages.spack.io/package.html?name=seissol>
 2. <https://seissol.readthedocs.io/en/latest/build-parameters.html>
-
----
-
-## Quick Start
-
-### Installation
-
-```bash
-# 1. Clone this repository
-git clone https://github.com/lucioquadros/seissol-spack-installer.git
-cd seissol-spack-installer
-
-# 2. Make the installer executable
-chmod +x install_seissol.sh
-
-# 3. [OPTIONAL] Edit a parameter file
-$EDITOR seissol_params.conf  # adjust convergence_order, equations, etc. 
-
-# 4. Run the installer
-#    If this is your first run and you are unsure whether the system
-#    dependencies that Spack needs are already installed, add --install-deps
-./install_seissol.sh --install-deps
-```
-
-The first run downloads and compiles all dependencies. It may take several minutes
-depending on your hardware and internet connection. Even more if compiling GCC-14 from source ('--gcc-14' option).
-
-### After installation
-
-```bash
-# 5. Activate in a new shell
-source ~/spack/share/spack/setup-env.sh
-spack env activate seissol-env
-
-# 6. Verify SeisSol binaries (e.g.)
-compgen -c | grep "SeisSol_*"
-```
-
-> **SeisSol variants note:** multiple installations with different SeisSol build
-> parameters are possible. Rerun the script with the new parameters in your
-> configuration file. If you want to preserve both installations, create a new
-> environment via --spack-env <new_name>.  Spack will reuse the compatible
-> dependencies, so a new run will be faster.
 
 ---
 
