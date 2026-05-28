@@ -191,6 +191,7 @@ which SeisSol_Release_*
 > parameters is possible. Rerun the script with the new parameters. If you want
 > to preserve both installations, pass a new environment name via
 > --spack-env <new_name>.
+> Spack will reuse the compatible dependencies, so a new run will be faster.
 
 ---
 
