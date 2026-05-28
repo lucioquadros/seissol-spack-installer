@@ -31,7 +31,7 @@ SEISSOL_PARAMS_FILE="seissol_params.conf"
 BUILD_GCC=false
 GCC_V=""
 AUTO_YES=false
-SEISSOL_POROELASTIC=false   # set true when equations=poroelastic (seissol workaround)
+SEISSOL_POROELASTIC=false   # auto set true when equations=poroelastic (seissol workaround)
 
 # Populated by GCC helper
 GCC_HELPER=""
@@ -548,11 +548,15 @@ parse_seissol_config() {
 # ===========================================================================
 # POROELASTIC LAPACK WORKAROUND
 # ===========================================================================
-# The upstream SeisSol Spack recipe special-cases poroelastic for Fortran
-# (depends_on fortran ... when="equations=poroelastic") but omits the matching
-# LAPACK dependency. As a result a poroelastic build fails at CMake time with
-# "Could NOT find BLAS", unless a BLAS/LAPACK provider is a *direct* dependency
-# of seissol.
+# Maybe upstream issue?
+# The SeisSol Spack recipe cites special-cases for poroelastic equations for
+# Fortran (depends_on fortran ...  when="equations=poroelastic") but omits a
+# matching LAPACK dependency. As a result, a poroelastic build fails at CMake
+# with "Could NOT find BLAS", unless a BLAS/LAPACK provider is a *direct*
+# dependency of seissol.
+#
+# As a workaround, I add "depends_on("lapack", when="equations=poroelastic")" to
+# the SeisSol Spack recipe. 
 # ===========================================================================
 ensure_poroelastic_lapack() {
     [[ "${SEISSOL_POROELASTIC}" == "true" ]] || return 0
@@ -641,15 +645,9 @@ print_summary() {
     log_info "Spack env       : ${SPACK_ENV_NAME}"
     log_info "Log file        : ${LOG_FILE}"
     log_info ""
-    log_info "To use SeisSol in a new shell:"
+    log_info "To use SeisSol:"
     log_info "  source ${SPACK_DIR}/share/spack/setup-env.sh"
     log_info "  spack env activate ${SPACK_ENV_NAME}"
-    log_info ""
-    log_info "To add another configuration to the same environment:"
-    log_info "  spack env activate ${SPACK_ENV_NAME}"
-    log_info "  spack add seissol convergence_order=6 equations=poroelastic [...]"
-    log_info "  spack install"
-    log_info ""
     log_ok "Done. Bye."
 }
 
