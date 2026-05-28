@@ -179,8 +179,8 @@ See [Build Parameter File](#build-parameter-file) for parameter references.
 source ~/spack/share/spack/setup-env.sh
 spack env activate seissol-env
 
-# 6. Verify SeisSol binaries
-which SeisSol_Release_*
+# 6. Verify SeisSol binaries (e.g. for bash)
+compgen -c | grep "SeisSol_*"
 ```
 
 > **SeisSol variants note:** multiple installations with different SeisSol
