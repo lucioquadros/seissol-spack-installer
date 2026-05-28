@@ -40,6 +40,9 @@ GCC_VERSION=""
 GCC_MAJOR=""
 GCC_PREFIX=""
 
+# Build staging directory
+BUILD_TMPDIR=""
+
 # ===========================================================================
 # COLOUR / LOGGING
 # ===========================================================================
@@ -352,6 +355,14 @@ setup_spack() {
             https://github.com/spack/spack.git "${SPACK_DIR}" \
             2>&1 | tee -a "${LOG_FILE}"
     fi
+
+    # Keep build staging off a (possibly small, RAM-backed) /tmp.
+    BUILD_TMPDIR="${SPACK_DIR}/tmp"
+    mkdir -p "${BUILD_TMPDIR}"
+    export TMPDIR="${BUILD_TMPDIR}"
+    local avail_gb
+    avail_gb=$(df -BG --output=avail "${BUILD_TMPDIR}" 2>/dev/null | tail -n 1 | tr -dc '0-9' || true)
+    log_info "Build staging dir (TMPDIR): ${BUILD_TMPDIR}${avail_gb:+ (~${avail_gb} GB free)}"
 
     [[ -f "${SPACK_DIR}/share/spack/setup-env.sh" ]] || \
         die "Spack setup script not found at ${SPACK_DIR}/share/spack/setup-env.sh"
