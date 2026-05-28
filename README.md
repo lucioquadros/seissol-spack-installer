@@ -74,6 +74,7 @@ Options:
                       (default: seissol_params.conf in the script directory)
  -j, --jobs N         Parallel build jobs (default: nproc − 1)
  --spack-dir DIR      Where to clone or find Spack (default: ~/spack)
+ --spack-env STR      Spack environment name (default: seissol-env)
  --log FILE           Custom log file path
                       (default: ~/seissol_install_YYYYMMDD_HHMMSS.log)
  --gcc-14             Build gcc-14 from source / export it to PATH
@@ -185,6 +186,12 @@ spack env activate seissol-env
 # Verify SeisSol binaries
 which SeisSol_Release_*
 ```
+
+> **SeisSol variants note:** multiple installations with different SeisSol
+> parameters is possible. Rerun the script with the new parameters. If you want
+> to preserve both installations, pass a new environment name via
+> --spack-env <new_name>.
+
 ---
 
 ## License

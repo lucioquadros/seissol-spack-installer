@@ -10,6 +10,7 @@
 #                       (default: seissol_params.conf in the script directory)
 #  -j, --jobs N         Parallel build jobs (default: nproc − 1)
 #  --spack-dir DIR      Where to clone or find Spack (default: ~/spack)
+#  --spack-env STR      Spack environment name (default: seissol-env)
 #  --log FILE           Custom log file path
 #                       (default: ~/seissol_install_YYYYMMDD_HHMMSS.log)
 #  --gcc-14             Build gcc-14 from source / export it to PATH
@@ -70,6 +71,7 @@ parse_args() {
             --params-file) SEISSOL_PARAMS_FILE="$2"; shift 2 ;;
             -j|--jobs)     JOBS="$2";                shift 2 ;;
             --spack-dir)   SPACK_DIR="$2";           shift 2 ;;
+	    --spack-env)   SPACK_ENV_NAME="$2";      shift 2 ;;
             --log)         LOG_FILE="$2";            shift 2 ;;
             --gcc-14)      BUILD_GCC=true;           shift 1 ;;
             -y|--yes)      AUTO_YES=true;            shift 1 ;;
@@ -80,7 +82,7 @@ parse_args() {
 }
 
 usage() {
-    grep '^#' "$0" | grep -E '^\# ' | sed 's/^# //' | head -16
+    grep '^#' "$0" | grep -E '^\# ' | sed 's/^# //' | head -17
 }
 
 # ===========================================================================
