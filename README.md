@@ -129,8 +129,8 @@ Blank lines and lines starting with `#` are ignored. Inline comments
 | `gemm_tools_list = LIBXSMM,PSpaMM` | `gemm_tools_list=LIBXSMM,PSpaMM` |
 
 Full parameter reference:
-1. <https://seissol.readthedocs.io/en/latest/build-parameters.html>
-2. <https://packages.spack.io/package.html?name=seissol>
+1. <https://packages.spack.io/package.html?name=seissol>
+2. <https://seissol.readthedocs.io/en/latest/build-parameters.html>
 
 ### Implicit dependency pins
 
