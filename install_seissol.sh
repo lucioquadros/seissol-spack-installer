@@ -31,6 +31,7 @@ SEISSOL_PARAMS_FILE="seissol_params.conf"
 BUILD_GCC=false
 GCC_V=""
 AUTO_YES=false
+SEISSOL_POROELASTIC=false   # set true when equations=poroelastic (seissol workaround)
 
 # Populated by GCC helper
 GCC_HELPER=""
@@ -506,6 +507,12 @@ parse_seissol_config() {
 
         case "${key}" in
             version) pkg_version="${raw_val}" ;;
+            equations)
+                SEISSOL_SPEC+=" equations=${raw_val}"
+                if [[ "${lower_val}" == "poroelastic" ]]; then
+                    SEISSOL_POROELASTIC=true
+                fi
+                ;;
             *)
                 case "${lower_val}" in
                     true|yes|on)   SEISSOL_SPEC+=" +${key}" ;;
@@ -539,6 +546,59 @@ parse_seissol_config() {
 }
 
 # ===========================================================================
+# POROELASTIC LAPACK WORKAROUND
+# ===========================================================================
+# The upstream SeisSol Spack recipe special-cases poroelastic for Fortran
+# (depends_on fortran ... when="equations=poroelastic") but omits the matching
+# LAPACK dependency. As a result a poroelastic build fails at CMake time with
+# "Could NOT find BLAS", unless a BLAS/LAPACK provider is a *direct* dependency
+# of seissol.
+# ===========================================================================
+ensure_poroelastic_lapack() {
+    [[ "${SEISSOL_POROELASTIC}" == "true" ]] || return 0
+
+    log_step "Poroelastic selected - ensuring the SeisSol recipe declares a LAPACK dependency"
+
+    local pkg_dir pkg_file
+    pkg_dir=$(spack location --package-dir seissol 2>/dev/null) \
+        || die "Could not locate the seissol package (spack location --package-dir seissol)."
+    pkg_file="${pkg_dir}/package.py"
+    [[ -f "${pkg_file}" ]] || die "seissol package.py not found at ${pkg_file}"
+
+    if grep -qE 'depends_on\("lapack"' "${pkg_file}"; then
+        log_info "  Recipe already declares a LAPACK dependency - nothing to do."
+        return 0
+    fi
+
+    local anchor='depends_on("fortran", type="build", when="equations=poroelastic")'
+    if ! grep -qF "${anchor}" "${pkg_file}"; then
+        log_warn "  Expected anchor line not found in ${pkg_file}"
+        log_warn "  (the recipe layout may have changed upstream)."
+        log_warn "  Add this line to the seissol package.py manually, then re-run:"
+        log_warn '      depends_on("lapack", when="equations=poroelastic")'
+        die "Aborting to avoid a poroelastic build that would fail at 'find BLAS'."
+    fi
+
+    cp -p "${pkg_file}" "${pkg_file}.seissol-installer.bak"
+    if ! awk '
+        { print }
+        /depends_on\("fortran", type="build", when="equations=poroelastic"\)/ {
+            print "    depends_on(\"lapack\", when=\"equations=poroelastic\")"
+        }' "${pkg_file}" > "${pkg_file}.tmp"; then
+        rm -f "${pkg_file}.tmp"
+        die "Failed to rewrite ${pkg_file} (original left untouched)."
+    fi
+    mv "${pkg_file}.tmp" "${pkg_file}"
+
+    if grep -qE 'depends_on\("lapack", when="equations=poroelastic"\)' "${pkg_file}"; then
+        log_ok "  Added: depends_on(\"lapack\", when=\"equations=poroelastic\")"
+        log_info "  Backup: ${pkg_file}.seissol-installer.bak"
+    else
+        die "Patch verification failed for ${pkg_file} - see the .bak backup."
+    fi
+}
+
+# ===========================================================================
 # SEISSOL INSTALLATION
 # ===========================================================================
 install_seissol() {
@@ -559,6 +619,8 @@ install_seissol() {
     spack env activate "${SPACK_ENV_NAME}" 2>&1
 
     parse_seissol_config
+
+    ensure_poroelastic_lapack
 
     log_step "Installing SeisSol (this will take a while - follow ${LOG_FILE} for progress)"
     spack add "${SEISSOL_SPEC}" 2>&1 | tee -a "${LOG_FILE}"
