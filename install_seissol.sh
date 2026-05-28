@@ -100,7 +100,7 @@ confirm_with_user() {
     echo -e "   1. Install Spack requirements and compiler packages via your package"
     echo -e "      manager (apt / dnf / zypper / pacman)."
     echo -e "   2. ${BOLD}${YELLOW}[Arch Linux only]${NC} Run a full system upgrade"
-    echo -e "      (pacman -Syu). Arch does not support partial upgrades, so this is"
+    echo -e "      (pacman -Syu). Arch may not support partial upgrades, so this is"
     echo -e "      required to keep the system consistent. ALL installed packages"
     echo -e "      will be upgraded to their latest versions."
     echo -e "   3. ${BOLD}${YELLOW}[RHEL / AlmaLinux / Rocky only]${NC} Permanently enable the EPEL"
