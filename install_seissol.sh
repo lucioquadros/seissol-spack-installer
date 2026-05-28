@@ -689,8 +689,8 @@ check_prerequisites() {
                df "${HOME}" | tail -1 | awk '{print $4}')
     AVAIL_GB=$(( AVAIL_KB / 1024 / 1024 ))
     log_info "Available disk space in ${HOME}: ~${AVAIL_GB} GB"
-    if [[ "${AVAIL_GB}" -lt 20 ]]; then
-        log_warn "Less than 20 GB free. Spack + SeisSol may need more."
+    if [[ "${AVAIL_GB}" -lt 30 ]]; then
+        log_warn "Less than 30 GB free. Spack + SeisSol may need more."
     fi
     log_ok "Prerequisites OK."
 }
