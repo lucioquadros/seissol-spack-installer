@@ -53,7 +53,7 @@ All output is logged to a timestamped file in `$HOME` for later inspection.
 | Bash | 4.0 |
 | Git | 2.12 | 
 | awk | - | 
-| Free disk space | ~20 GB | 
+| Free disk space | ~30 GB | 
 | RAM | ~16 GB | 
 
 > **Low-RAM / GPU builds note:** on machines with 16 GB of RAM or less, large
