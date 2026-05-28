@@ -54,7 +54,7 @@ All output is logged to a timestamped file in `$HOME` for later inspection.
 | Git | 2.12 | 
 | awk | - | 
 | Free disk space | ~20 GB | 
-| RAM | ~8 GB | 
+| RAM | ~16 GB | 
 
 > **Low-RAM / GPU builds note:** on machines with 16 GB of RAM or less, large
 > builds can be a problem, e.g. a "cuda = true" build. If you have problems,
