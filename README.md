@@ -47,7 +47,7 @@ All output is logged to a timestamped file in `$HOME` for later inspection.
 
 ## Prerequisites
 
-| Requirement | Minimum version | 
+| Requirement | Minimum | 
 |---|---|
 | Linux (x86-64 or ARM) | - |
 | Bash | 4.0 |
