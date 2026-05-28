@@ -106,10 +106,10 @@ Options:
 # let the script install them via your OS package manager
 ./install_seissol.sh --install-deps
 
-# Limit parallelism on a memory-constrained machine
+# Choose number of parallel jobs
 ./install_seissol.sh --params-file path/to/seissol_params.conf -j 4
 
-# Stage builds on disk instead of a RAM-backed /tmp
+# Change stage build directory
 # (recommended for low-RAM machines and large cuda/GPU builds)
 ./install_seissol.sh --build-dir ${HOME}/spack/tmp
 
@@ -123,7 +123,8 @@ Options:
 ./install_seissol.sh --gcc-14
 
 # Append extra Spack spec constraints (repeatable).
-./install_seissol.sh --params-file conf_examples/cuda_params.conf --spec-extra "^cuda@12"
+./install_seissol.sh --spec-extra "^cuda@12" --spec-extra "^netcdf-c@4.9:"
+
 ```
 
 > **.conf file note:** --params-file is optional, the program defaults to
@@ -157,20 +158,6 @@ Full parameter reference:
 1. <https://packages.spack.io/package.html?name=seissol>
 2. <https://seissol.readthedocs.io/en/latest/build-parameters.html>
 
-### Extra dependency constraints (`--spec-extra`)
-
-Some builds need extra Spack constraints that don't belong in every build, so
-the installer does not hard-code them. Pass them with `--spec-extra`, which
-appends the given string verbatim to the assembled SeisSol spec (the flag is
-repeatable, and each value is added in order). 
-
-Example combining several:
-
-```bash
-./install_seissol.sh --params-file conf_examples/cuda_params.conf \
-    --spec-extra "^cuda@12" --spec-extra "^netcdf-c@4.9:"
-```
-
 ---
 
 ## Quick Start
@@ -185,20 +172,17 @@ cd seissol-spack-installer
 # 2. Make the installer executable
 chmod +x install_seissol.sh
 
-# 3. Edit a parameter file
+# 3. [OPTIONAL] Edit a parameter file
 $EDITOR seissol_params.conf  # adjust convergence_order, equations, etc. 
 
 # 4. Run the installer
 #    If this is your first run and you are unsure whether the system
-#    dependencies Spack needs are already installed, add --install-deps
-#    so the script installs them for you (via apt / dnf / zypper / pacman).
+#    dependencies that Spack needs are already installed, add --install-deps
 ./install_seissol.sh --install-deps
 ```
 
 The first run downloads and compiles all dependencies. It may take several minutes
 depending on your hardware and internet connection. Even more if compiling GCC-14 from source ('--gcc-14' option).
-
-See [Build Parameter File](#build-parameter-file) for parameter references.
 
 ### After installation
 
@@ -207,15 +191,15 @@ See [Build Parameter File](#build-parameter-file) for parameter references.
 source ~/spack/share/spack/setup-env.sh
 spack env activate seissol-env
 
-# 6. Verify SeisSol binaries (e.g. for bash)
+# 6. Verify SeisSol binaries (e.g.)
 compgen -c | grep "SeisSol_*"
 ```
 
-> **SeisSol variants note:** multiple installations with different SeisSol
-> parameters are possible. Rerun the script with the new parameters. If you want
-> to preserve both installations, pass a new environment name via
-> --spack-env <new_name>.
-> Spack will reuse the compatible dependencies, so a new run will be faster.
+> **SeisSol variants note:** multiple installations with different SeisSol build
+> parameters are possible. Rerun the script with the new parameters in your
+> configuration file. If you want to preserve both installations, create a new
+> environment via --spack-env <new_name>.  Spack will reuse the compatible
+> dependencies, so a new run will be faster.
 
 ---
 
