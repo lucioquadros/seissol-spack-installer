@@ -56,14 +56,6 @@ All output is logged to a timestamped file in `$HOME` for later inspection.
 | Free disk space | ~20 GB | 
 | RAM | ~8 GB | 
 
-> **WSL 2 note:** if your system has less than 8 GB of RAM visible to WSL,
-> add a `.wslconfig` file in your Windows home directory:
-> ```ini
-> [wsl2]
-> memory=12GB <- your maximum RAM here
-> ```
-> Then restart WSL (`wsl --shutdown` in PowerShell).
-
 > **Low-RAM / GPU builds note:** on machines with 16 GB of RAM or less, large
 > builds can be a problem, e.g. a "cuda = true" build. If you have problems,
 > stage builds on disk by re-running with "--build-dir ${HOME}/spack/tmp".
