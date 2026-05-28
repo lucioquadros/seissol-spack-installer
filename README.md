@@ -89,7 +89,7 @@ depending on your hardware and internet connection. Even more if compiling GCC-1
 ### After installation
 
 ```bash
-# 5. Activate in a new shell
+# 5. Activate environment
 source ~/spack/share/spack/setup-env.sh
 spack env activate seissol-env
 
