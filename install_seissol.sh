@@ -675,9 +675,6 @@ mem_checks() {
     TOTAL_MEM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
     TOTAL_MEM_GB=$(( TOTAL_MEM_KB / 1024 / 1024 ))
     log_info "Available memory: ~${TOTAL_MEM_GB} GB"
-    if [[ "${TOTAL_MEM_GB}" -lt 8 ]]; then
-        log_warn "Less than 8 GB RAM detected. Large parallel builds may fail."
-    fi
     if [[ "${TOTAL_MEM_GB}" -le 16 ]]; then
         log_warn "16 GB RAM or less detected. Large builds (e.g. cuda/GPU) may fail or"
         log_warn "become very slow."
