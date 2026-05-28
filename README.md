@@ -165,10 +165,6 @@ $EDITOR seissol_params.conf  # adjust convergence_order, equations, etc.
 
 # 4. Run the installer
 ./install_seissol.sh
-
-# 5. After installation, activate the environment in any new shell
-source ~/spack/share/spack/setup-env.sh
-spack env activate seissol-env
 ```
 
 The first run downloads and compiles all dependencies. It may take several minutes
@@ -179,11 +175,11 @@ See [Build Parameter File](#build-parameter-file) for parameter references.
 ### After installation
 
 ```bash
-# Activate in a new shell
+# 5. Activate in a new shell
 source ~/spack/share/spack/setup-env.sh
 spack env activate seissol-env
 
-# Verify SeisSol binaries
+# 6. Verify SeisSol binaries
 which SeisSol_Release_*
 ```
 
