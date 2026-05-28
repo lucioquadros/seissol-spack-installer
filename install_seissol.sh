@@ -696,8 +696,8 @@ main() {
     log_section "SeisSol Spack Installer"
     log_info "Log: ${LOG_FILE}"
 
-    confirm_with_user
     resolve_gcc_helper_metadata
+    confirm_with_user
     detect_os
     check_prerequisites
     mem_checks
