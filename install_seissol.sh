@@ -18,6 +18,8 @@
 #  --log FILE           Custom log file path
 #                       (default: ~/seissol_install_YYYYMMDD_HHMMSS.log)
 #  --gcc-14             Build gcc-14 from source / export it to PATH
+#  --spec-extra SPEC    Extra Spack spec constraints appended to the SeisSol 
+#                       spec (repeatable).
 #  -y, --yes            Skip the confirmation prompt
 #  -h, --help           Show usage and exit
 # ===========================================================================
@@ -36,7 +38,8 @@ SEISSOL_PARAMS_FILE="seissol_params.conf"
 BUILD_GCC=false
 GCC_V=""
 AUTO_YES=false
-INSTALL_DEPS=false          
+INSTALL_DEPS=false
+SPEC_EXTRA=""               
 SEISSOL_POROELASTIC=false   # auto set true when equations=poroelastic (seissol workaround)
 
 # Populated by GCC helper
@@ -76,15 +79,16 @@ die() { log_error "$*"; exit 1; }
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --params-file) SEISSOL_PARAMS_FILE="$2"; shift 2 ;;
-            --install-deps) INSTALL_DEPS=true;       shift 1 ;;
-            -j|--jobs)     JOBS="$2";                shift 2 ;;
-            --spack-dir)   SPACK_DIR="$2";           shift 2 ;;
-            --spack-env)   SPACK_ENV_NAME="$2";      shift 2 ;;
-            --build-dir)   BUILD_TMPDIR="$2";        shift 2 ;;
-            --log)         LOG_FILE="$2";            shift 2 ;;
-            --gcc-14)      BUILD_GCC=true;           shift 1 ;;
-            -y|--yes)      AUTO_YES=true;            shift 1 ;;
+            --params-file) SEISSOL_PARAMS_FILE="$2";                     shift 2 ;;
+            --install-deps) INSTALL_DEPS=true;                           shift 1 ;;
+            -j|--jobs)     JOBS="$2";                                    shift 2 ;;
+            --spack-dir)   SPACK_DIR="$2";                               shift 2 ;;
+            --spack-env)   SPACK_ENV_NAME="$2";                          shift 2 ;;
+            --build-dir)   BUILD_TMPDIR="$2";                            shift 2 ;;
+            --log)         LOG_FILE="$2";                                shift 2 ;;
+            --gcc-14)      BUILD_GCC=true;                               shift 1 ;;
+            --spec-extra)  SPEC_EXTRA="${SPEC_EXTRA:+${SPEC_EXTRA} }$2"; shift 2 ;;
+            -y|--yes)      AUTO_YES=true;                                shift 1 ;;
             -h|--help)     usage; exit 0 ;;
             *) die "Unknown option: $1. Run with -h for help." ;;
         esac
@@ -92,7 +96,7 @@ parse_args() {
 }
 
 usage() {
-    grep '^#' "$0" | grep -E '^# ' | sed 's/^# //' | head -21
+    grep '^#' "$0" | grep -E '^# ' | sed 's/^# //' | head -23
 }
 
 # ===========================================================================
@@ -500,9 +504,6 @@ parse_seissol_config() {
     local pkg_version="master"
     SEISSOL_SPEC="seissol"
 
-    # Track variants the user explicitly disabled (false/no/off).
-    local -A DISABLED_VARIANTS=() # <- remove?
-
     local line_num=0
     while IFS= read -r raw_line || [[ -n "${raw_line}" ]]; do
         (( line_num++ )) || true
@@ -542,10 +543,7 @@ parse_seissol_config() {
             *)
                 case "${lower_val}" in
                     true|yes|on)   SEISSOL_SPEC+=" +${key}" ;;
-                    false|no|off)
-                        SEISSOL_SPEC+=" ~${key}"
-                        DISABLED_VARIANTS["${key}"]=1
-                        ;;
+                    false|no|off)  SEISSOL_SPEC+=" ~${key}" ;;
                     *)             SEISSOL_SPEC+=" ${key}=${raw_val}" ;;
                 esac
                 ;;
@@ -554,19 +552,10 @@ parse_seissol_config() {
 
     SEISSOL_SPEC="seissol@${pkg_version}${SEISSOL_SPEC#seissol} ${GCC_V}"
 
-    # Workaround pins for C23 / FreeType incompatibilities in the dep tree.
-    # The netcdf-c pin is only added when the netcdf variant is still enabled;
-    # otherwise '~netcdf ^netcdf-c@4.9:' would be a contradiction for Spack.
-    # The matplotlib pin is kept unconditional.
-    #if [[ -z "${DISABLED_VARIANTS[netcdf]:-}" ]]; then
-    #    # netcdf-c 4.8.x is incompatible with C23
-    #    SEISSOL_SPEC+=" ^netcdf-c@4.9:"
-    #else
-    #    log_info "  netcdf variant disabled - skipping ^netcdf-c@4.9: pin"
-    #fi
-
-    ## matplotlib 3.2.x is incompatible with FreeType >= 2.11
-    #SEISSOL_SPEC+=" ^py-matplotlib@3.5:"
+    if [[ -n "${SPEC_EXTRA}" ]]; then
+        SEISSOL_SPEC+=" ${SPEC_EXTRA}"
+        log_info "  Appended extra spec constraints (--spec-extra): ${SPEC_EXTRA}"
+    fi
 
     log_ok "Spec assembled: ${SEISSOL_SPEC}"
 }

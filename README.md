@@ -90,6 +90,8 @@ Options:
  --log FILE           Custom log file path
                       (default: ~/seissol_install_YYYYMMDD_HHMMSS.log)
  --gcc-14             Build gcc-14 from source / export it to PATH
+ --spec-extra SPEC    Extra Spack spec constraints appended to the SeisSol spec.
+                      Repeatable. E.g. --spec-extra "^cuda@12".
  -y, --yes            Skip the confirmation prompt
  -h, --help           Show usage and exit
 ```
@@ -119,6 +121,9 @@ Options:
 
 # Build and use GCC-14 from source (compatibility option)
 ./install_seissol.sh --gcc-14
+
+# Append extra Spack spec constraints (repeatable).
+./install_seissol.sh --params-file conf_examples/cuda_params.conf --spec-extra "^cuda@12"
 ```
 
 > **.conf file note:** --params-file is optional, the program defaults to
@@ -152,19 +157,19 @@ Full parameter reference:
 1. <https://packages.spack.io/package.html?name=seissol>
 2. <https://seissol.readthedocs.io/en/latest/build-parameters.html>
 
-### Implicit dependency pins
+### Extra dependency constraints (`--spec-extra`)
 
-In addition to the variants you set in the parameter file, the installer
-appends two constraints to the assembled Spack spec to work around known
-incompatibilities in SeisSol's dependency tree:
+Some builds need extra Spack constraints that don't belong in every build, so
+the installer does not hard-code them. Pass them with `--spec-extra`, which
+appends the given string verbatim to the assembled SeisSol spec (the flag is
+repeatable, and each value is added in order). 
 
-| Constraint | Reason | When applied |
-|---|---|---|
-| `^netcdf-c@4.9:` | `netcdf-c` 4.8.x fails to build with C23 (default in GCC 15+) | Only when the `netcdf` variant is **not** disabled in the params file. Setting `netcdf = false` skips this pin. |
-| `^py-matplotlib@3.5:` | `py-matplotlib` 3.2.x is incompatible with FreeType ≥ 2.11 | Always added. Spack ignores `^`-constraints for dependencies that aren't actually in the resolved DAG, so this is a no-op when matplotlib isn't pulled in. |
+Example combining several:
 
-If a future SeisSol or Spack release fixes these upstream, the pins can be
-removed from `install_seissol.sh` (search for `netcdf-c` and `py-matplotlib`).
+```bash
+./install_seissol.sh --params-file conf_examples/cuda_params.conf \
+    --spec-extra "^cuda@12" --spec-extra "^netcdf-c@4.9:"
+```
 
 ---
 
