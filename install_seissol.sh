@@ -9,15 +9,12 @@
 #  --params-file FILE   SeisSol build-parameter file
 #                       (default: seissol_params.conf in the script directory)
 #  --install-deps       Install system dependencies for Spack via the OS
-#                       package manager (apt / dnf / zypper / pacman).
-#                       If omitted, dependencies are assumed to be already
-#                       met and the script proceeds straight to Spack.
+#                       package manager.
 #  -j, --jobs N         Parallel build jobs (default: nproc − 1)
 #  --spack-dir DIR      Where to clone or find Spack (default: ~/spack)
 #  --spack-env STR      Spack environment name (default: seissol-env)
-#  --build-dir DIR      Build staging dir; sets TMPDIR to DIR.
-#                       (default: system TMPDIR, usually /tmp and often
-#                       RAM-backed).
+#  --build-dir DIR      Build staging dir; sets TMPDIR to DIR
+#                       (default: system TMPDIR).
 #  --log FILE           Custom log file path
 #                       (default: ~/seissol_install_YYYYMMDD_HHMMSS.log)
 #  --gcc-14             Build gcc-14 from source / export it to PATH
@@ -95,7 +92,7 @@ parse_args() {
 }
 
 usage() {
-    grep '^#' "$0" | grep -E '^\# ' | sed 's/^# //' | head -24
+    grep '^#' "$0" | grep -E '^# ' | sed 's/^# //' | head -21
 }
 
 # ===========================================================================
