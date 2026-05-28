@@ -235,7 +235,7 @@ DEBIAN_PKGS=(
     git gzip lsb-release patch
     python3 python3-dev
     tar unzip xz-utils zstd
-    wget curl patchelf
+    wget curl patchelf zlib1g-dev
 )
 
 RHEL_PKGS=(
@@ -244,7 +244,7 @@ RHEL_PKGS=(
     git gzip patch
     python3 python3-devel
     tar unzip xz zstd
-    wget curl patchelf
+    wget curl patchelf zlib-static
 )
 
 SUSE_PKGS=(
@@ -252,8 +252,8 @@ SUSE_PKGS=(
     gcc gcc-c++ gcc-fortran
     git gzip lsb-release patch
     python3 python3-devel
-    tar unzip xz zstd
-    wget curl patchelf
+    tar unzip xz zstd wget curl
+    patchelf zlib-devel-static zlib-devel
 )
 
 ARCH_PKGS=(
@@ -261,7 +261,7 @@ ARCH_PKGS=(
     git bzip2 lsb-release
     python
     tar unzip xz zstd
-    wget curl patchelf
+    wget curl patchelf zlib
 )
 
 install_packages() {
