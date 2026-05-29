@@ -3,8 +3,8 @@
 This project provides a portable installer for [SeisSol](https://seissol.org), a
 high-performance earthquake simulation code, using the [Spack](https://spack.io)
 package manager on Linux OS. The goal is to try to reduce the barrier to entry
-for new users by automating the installation process through a configuration
-file that mirrors SeisSol's own build parameters.
+for new users by automating the installation process on local workstations
+through a configuration file that mirrors SeisSol's own build parameters.
 
 **Tested Linux distros:**
 
