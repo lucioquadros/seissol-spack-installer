@@ -96,7 +96,7 @@ source ~/spack/share/spack/setup-env.sh
 spack env activate seissol-env
 
 # 6. Verify SeisSol binaries (e.g.)
-compgen -c | grep "SeisSol_*"
+compgen -c | grep SeisSol
 ```
 
 > **SeisSol variants note:** multiple installations with different SeisSol build
