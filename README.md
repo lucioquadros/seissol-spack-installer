@@ -14,6 +14,7 @@ through a configuration file that mirrors SeisSol's own build parameters.
 | Arch | rolling |
 | Debian | 13 |
 | Fedora | 43, 44 |
+| Suse Leap | 16 |
 | Ubuntu | 22.04, 24.04, 26.04 |
 
 ---
