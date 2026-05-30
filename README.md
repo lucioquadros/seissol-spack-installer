@@ -116,9 +116,7 @@ Options:
  --params-file FILE   SeisSol build-parameter file
                       (default: seissol_params.conf in the script directory)
  --install-deps       Install system dependencies for Spack via the OS package
-                      manager (apt / dnf / zypper / pacman). If omitted, the
-                      dependencies are assumed to be already met and the script
-                      proceeds straight to the Spack install.
+                      manager (apt / dnf / zypper / pacman)
  -j, --jobs N         Parallel build jobs (default: nproc − 1)
  --spack-dir DIR      Where to clone or find Spack (default: ~/spack)
  --spack-env STR      Spack environment name (default: seissol-env)
