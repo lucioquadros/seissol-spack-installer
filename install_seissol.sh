@@ -634,6 +634,8 @@ install_seissol() {
 
     log_step "Creating Spack environment '${SPACK_ENV_NAME}'"
     if spack env list 2>/dev/null | grep -qE "^[*[:space:]]*${SPACK_ENV_NAME}$"; then
+        log_info "  Removing '${SPACK_ENV_NAME}', if it fails, deactivate it first:"
+        log_info "  spack env deactivate"
         spack env remove --yes-to-all "${SPACK_ENV_NAME}" 2>&1 | tee -a "${LOG_FILE}"
     fi
     spack env create "${SPACK_ENV_NAME}" 2>&1 | tee -a "${LOG_FILE}"
