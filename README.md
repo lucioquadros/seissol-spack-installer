@@ -186,8 +186,8 @@ Blank lines and lines starting with `#` are ignored. Inline comments
 | Value in file | Spack token produced |
 |---|---|
 | `version = master` | `seissol@master` |
-| `with_mpi = true` | `+with_mpi` |
-| `with_asagi = false` | `~with_asagi` |
+| `cuda = true` | `+cuda` |
+| `asagi = false` | `~asagi` |
 | `equations = elastic` | `equations=elastic` |
 | `gemm_tools_list = LIBXSMM,PSpaMM` | `gemm_tools_list=LIBXSMM,PSpaMM` |
 
