@@ -254,7 +254,7 @@ DEBIAN_PKGS=(
 RHEL_PKGS=(
     file bzip2 ca-certificates
     gcc gcc-c++ gcc-gfortran
-    git gzip patch
+    git gzip patch which
     python3 python3-devel
     tar unzip xz zstd
     wget curl patchelf zlib-static
@@ -272,7 +272,7 @@ SUSE_PKGS=(
 ARCH_PKGS=(
     base-devel gcc-fortran
     git bzip2 lsb-release
-    python
+    python which
     tar unzip xz zstd
     wget curl patchelf zlib
 )
