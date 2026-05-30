@@ -278,6 +278,13 @@ ARCH_PKGS=(
 )
 
 install_packages() {
+    if [[ "${INSTALL_DEPS}" == "false" ]]; then
+        log_warn "Assuming dependencies are met... continuing with Spack install."
+        log_warn "(Re-run with --install-deps to install the system dependencies for"
+        log_warn " Spack via your OS package manager if a later step fails)."
+	return 0
+    fi
+
     log_section "Installing system dependencies"
 
     if ! command -v sudo &>/dev/null; then
@@ -373,18 +380,14 @@ setup_spack() {
     if [[ -n "${BUILD_TMPDIR}" ]]; then
         mkdir -p "${BUILD_TMPDIR}"
         export TMPDIR="${BUILD_TMPDIR}"
-        local avail_gb
-        avail_gb=$(df -BG --output=avail "${BUILD_TMPDIR}" 2>/dev/null | tail -n 1 | tr -dc '0-9' || true)
-        log_info "Build staging dir (TMPDIR): ${BUILD_TMPDIR}${avail_gb:+ (~${avail_gb} GB free)}"
+        log_info "Build staging dir (TMPDIR): ${BUILD_TMPDIR}"
     else
         log_info "Build staging dir (TMPDIR): system default (${TMPDIR:-/tmp})."
-        log_info "Pass --build-dir DIR (e.g. ${HOME}/spack/tmp) to stage builds elsewhere."
     fi
 
     [[ -f "${SPACK_DIR}/share/spack/setup-env.sh" ]] || \
         die "Spack setup script not found at ${SPACK_DIR}/share/spack/setup-env.sh"
 
-    # Activate Spack in the current shell
     log_step "Activating Spack"
     # shellcheck source=/dev/null
     source "${SPACK_DIR}/share/spack/setup-env.sh"
@@ -676,10 +679,9 @@ mem_checks() {
     TOTAL_MEM_GB=$(( TOTAL_MEM_KB / 1024 / 1024 ))
     log_info "Available memory: ~${TOTAL_MEM_GB} GB"
     if [[ "${TOTAL_MEM_GB}" -le 16 ]]; then
-        log_warn "16 GB RAM or less detected. Large builds (e.g. cuda/GPU) may fail or"
-        log_warn "become very slow."
-        log_warn "Recommended: stage builds on disk by re-running with:"
-        log_warn "    --build-dir ${HOME}/spack/tmp"
+        log_warn "16 GB RAM or less detected. Large builds (e.g. cuda/GPU)"
+        log_warn "may fail or become very slow. Recommended: stage builds on"
+        log_warn "disk by re-running with: --build-dir ${HOME}/spack/tmp"
     fi
     log_ok "RAM checks complete."
 }
@@ -717,13 +719,7 @@ main() {
     detect_os
     check_prerequisites
     mem_checks
-    if [[ "${INSTALL_DEPS}" == "true" ]]; then
-        install_packages
-    else
-        log_warn "Assuming dependencies are met... continuing with Spack install."
-        log_warn "(Re-run with --install-deps to install the system dependencies for"
-        log_warn " Spack via your OS package manager if a later step fails.)"
-    fi
+    install_packages
     setup_spack
     install_seissol
     print_summary
