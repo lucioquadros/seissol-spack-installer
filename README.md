@@ -26,6 +26,7 @@ through a configuration file that mirrors SeisSol's own build parameters.
 - [Quick Start](#quick-start)
 - [Installation Options](#installation-options)
 - [Build Parameter File](#build-parameter-file)
+- [Example Configurations](#example-configurations)
 - [License](#license)
 
 ---
@@ -193,6 +194,14 @@ Blank lines and lines starting with `#` are ignored. Inline comments
 Full parameter reference:
 1. <https://packages.spack.io/package.html?name=seissol>
 2. <https://seissol.readthedocs.io/en/latest/build-parameters.html>
+
+---
+
+## Example Configurations
+
+The `conf_examples/` directory holds examples of parameter files for
+SeisSol builds. Point `--params-file` at one (or copy it to
+`seissol_params.conf`) and edit as needed.
 
 ---
 
