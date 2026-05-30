@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ===========================================================================
 #  install_seissol.sh - SeisSol installation via Spack
-#  Targets (incl. WSL): Ubuntu/Debian, RHEL/Fedora, openSUSE/SLES, Arch
+#  Targets (incl. WSL): Ubuntu/Debian, RHEL/Fedora, openSUSE, Arch
 # ===========================================================================
 # Usage: ./install_seissol.sh [OPTIONS]
 #
