@@ -265,7 +265,7 @@ SUSE_PKGS=(
     gcc gcc-c++ gcc-fortran
     git gzip lsb-release patch
     python3 python3-devel
-    tar unzip xz zstd wget curl
+    tar unzip xz zstd wget curl which
     patchelf zlib-devel-static zlib-devel
 )
 
