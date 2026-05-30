@@ -18,7 +18,7 @@
 #  --log FILE           Custom log file path
 #                       (default: ~/seissol_install_YYYYMMDD_HHMMSS.log)
 #  --gcc-14             Build gcc-14 from source / export it to PATH
-#  --spec-extra SPEC    Extra Spack spec constraints appended to the SeisSol 
+#  --spec-extra SPEC    Extra Spack spec constraints appended to the SeisSol
 #                       spec (repeatable).
 #  -y, --yes            Skip the confirmation prompt
 #  -h, --help           Show usage and exit
@@ -39,7 +39,7 @@ BUILD_GCC=false
 GCC_V=""
 AUTO_YES=false
 INSTALL_DEPS=false
-SPEC_EXTRA=""               
+SPEC_EXTRA=""
 SEISSOL_POROELASTIC=false   # auto set true when equations=poroelastic (seissol workaround)
 
 # Populated by GCC helper
@@ -282,7 +282,7 @@ install_packages() {
         log_warn "Assuming dependencies are met... continuing with Spack install."
         log_warn "(Re-run with --install-deps to install the system dependencies for"
         log_warn " Spack via your OS package manager if a later step fails)."
-	return 0
+        return 0
     fi
 
     log_section "Installing system dependencies"
