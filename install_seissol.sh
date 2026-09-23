@@ -10,8 +10,11 @@
 #                       (default: seissol_params.conf in the script directory)
 #  --install-deps       Install system dependencies for Spack via the OS
 #                       package manager.
-#  -j, --jobs N         Parallel build jobs (default: nproc − 1)
+#  -j, --jobs N         Parallel build jobs (default: SLURM_CPUS_PER_TASK if
+#                       set, otherwise nproc − 1)
 #  --spack-dir DIR      Where to clone or find Spack (default: ~/spack)
+#  --no-spack-update    Use an existing Spack clone as is (no git fetch/pull)
+#  --no-shell-rc        Do not modify ~/.bashrc or ~/.zshrc
 #  --spack-env STR      Spack environment name (default: seissol-env)
 #  --build-dir DIR      Build staging dir; sets TMPDIR to DIR
 #                       (default: system TMPDIR).
@@ -39,6 +42,9 @@ BUILD_GCC=false
 GCC_V=""
 AUTO_YES=false
 INSTALL_DEPS=false
+SPACK_UPDATE=true
+SHELL_RC_UPDATE=true
+OFFLINE=false
 SPEC_EXTRA=""
 SEISSOL_POROELASTIC=false   # auto set true when equations=poroelastic (seissol workaround)
 
@@ -84,6 +90,8 @@ parse_args() {
             -j|--jobs)     JOBS="$2";                                    shift 2 ;;
             --spack-dir)   SPACK_DIR="$2";                               shift 2 ;;
             --spack-env)   SPACK_ENV_NAME="$2";                          shift 2 ;;
+            --no-spack-update) SPACK_UPDATE=false;                       shift 1 ;;
+            --no-shell-rc) SHELL_RC_UPDATE=false;                        shift 1 ;;
             --build-dir)   BUILD_TMPDIR="$2";                            shift 2 ;;
             --log)         LOG_FILE="$2";                                shift 2 ;;
             --gcc-14)      BUILD_GCC=true;                               shift 1 ;;
@@ -96,7 +104,7 @@ parse_args() {
 }
 
 usage() {
-    grep '^#' "$0" | grep -E '^# ' | sed 's/^# //' | head -23
+    awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"
 }
 
 # ===========================================================================
@@ -133,11 +141,16 @@ confirm_with_user() {
     echo -e "      and in the hidden folder ${BOLD}~/.spack${NC}."
     echo -e "      Everything under these folders are self-contained and can"
     echo -e "      be removed at any time with: rm -rf ${SPACK_DIR} ~/.spack"
-    echo -e "   6. Append a Spack activation line to ${BOLD}~/.bashrc${NC} or ${BOLD}~/.zshrc${NC}"
-    echo -e "      so that Spack is available in new shells after installation."
-    echo -e "   7. ${BOLD}${YELLOW}[optional --gcc-14 flag only]${NC} Append a PATH and"
-    echo -e "      LD_LIBRARY_PATH line for ${GCC_PREFIX} to ${BOLD}~/.bashrc${NC} or"
-    echo -e "      ${BOLD}~/.zshrc${NC} so future shells can find the compiled GCC."
+    if [[ "${SHELL_RC_UPDATE}" == "true" ]]; then
+        echo -e "   6. Append a Spack activation line to ${BOLD}~/.bashrc${NC} or ${BOLD}~/.zshrc${NC}"
+        echo -e "      so that Spack is available in new shells after installation."
+        echo -e "   7. ${BOLD}${YELLOW}[optional --gcc-14 flag only]${NC} Append a PATH and"
+        echo -e "      LD_LIBRARY_PATH line for ${GCC_PREFIX} to ${BOLD}~/.bashrc${NC} or"
+        echo -e "      ${BOLD}~/.zshrc${NC} so future shells can find the compiled GCC."
+    else
+        echo -e "   6. ${BOLD}${YELLOW}[skipped: --no-shell-rc]${NC} ~/.bashrc and ~/.zshrc will"
+        echo -e "      not be modified."
+    fi
     echo ""
     echo -e "  ${BOLD}Notes:${NC}"
     echo -e "   - The installation is mostly unattended once confirmed."
@@ -198,7 +211,9 @@ detect_os() {
     elif [[ "$(uname)" == "Darwin" ]]; then
         die "macOS detected. This script targets Linux. Aborted."
     else
-        die "Cannot detect OS - /etc/os-release not found."
+        OS_ID="unknown"
+        OS_VERSION="0"
+        log_warn "Cannot detect OS: /etc/os-release not found."
     fi
 
     log_info "OS: ${OS_ID} ${OS_VERSION}"
@@ -215,7 +230,11 @@ detect_os() {
         arch|manjaro|endeavouros|garuda)
             OS_FAMILY="arch" ;;
         *)
-            die "Unknown distro '${OS_ID}'. Aborted!" ;;
+            if [[ "${INSTALL_DEPS}" == "true" ]]; then
+                die "Unknown distro '${OS_ID}': cannot install packages with --install-deps. Aborted!"
+            fi
+            log_warn "Unknown distro '${OS_ID}'. Distro ID only needed for --install-deps. Continuing..."
+            OS_FAMILY="unknown" ;;
     esac
 }
 
@@ -361,7 +380,9 @@ setup_spack() {
     log_section "Setting up Spack"
 
     # Clone or update Spack
-    if [[ -d "${SPACK_DIR}/.git" ]]; then
+    if [[ -d "${SPACK_DIR}/.git" && "${SPACK_UPDATE}" == "false" ]]; then
+        log_info "Spack already present at ${SPACK_DIR}. Using it as is (--no-spack-update)."
+    elif [[ -d "${SPACK_DIR}/.git" ]]; then
         log_info "Spack already present at ${SPACK_DIR}. Pulling latest changes."
         git -C "${SPACK_DIR}" fetch origin "${SPACK_BRANCH}" \
             2>&1 | tee -a "${LOG_FILE}"
@@ -395,7 +416,9 @@ setup_spack() {
     # Persist activation for future interactive shells
     local SPACK_INIT_LINE=". ${SPACK_DIR}/share/spack/setup-env.sh"
     local SHELL_RC=""
-    if   [[ -f "${HOME}/.bashrc" ]]; then SHELL_RC="${HOME}/.bashrc"
+    if [[ "${SHELL_RC_UPDATE}" == "false" ]]; then
+        log_info "Not modifying ~/.bashrc or ~/.zshrc (--no-shell-rc)."
+    elif [[ -f "${HOME}/.bashrc" ]]; then SHELL_RC="${HOME}/.bashrc"
     elif [[ -f "${HOME}/.zshrc"  ]]; then SHELL_RC="${HOME}/.zshrc"
     fi
     if [[ -n "${SHELL_RC}" ]] && ! grep -qF "${SPACK_INIT_LINE}" "${SHELL_RC}"; then
@@ -623,14 +646,25 @@ ensure_poroelastic_lapack() {
 # ===========================================================================
 # SEISSOL INSTALLATION
 # ===========================================================================
+resolve_jobs() {
+    local source="--jobs"
+    if [[ -z "${JOBS}" && -n "${SLURM_CPUS_PER_TASK:-}" ]]; then
+        JOBS="${SLURM_CPUS_PER_TASK}"
+        source="SLURM_CPUS_PER_TASK"
+    elif [[ -z "${JOBS}" ]]; then
+        JOBS=$(env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc 2>/dev/null \
+               || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+        JOBS=$(( JOBS > 1 ? JOBS - 1 : 1 ))
+        source="nproc - 1"
+    fi
+    [[ "${JOBS}" =~ ^[1-9][0-9]*$ ]] || die "Invalid job count '${JOBS}' (from ${source})."
+    log_info "Using ${JOBS} parallel jobs (from ${source})."
+}
+
 install_seissol() {
     log_section "Installing SeisSol via Spack"
 
-    if [[ -z "${JOBS}" ]]; then
-        JOBS=$(nproc --all 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
-        JOBS=$(( JOBS > 1 ? JOBS - 1 : JOBS ))
-    fi
-    log_info "Using ${JOBS} parallel jobs."
+    resolve_jobs
 
     log_step "Creating Spack environment '${SPACK_ENV_NAME}'"
     if spack env list 2>/dev/null | grep -qE "^[*[:space:]]*${SPACK_ENV_NAME}$"; then
@@ -683,7 +717,7 @@ mem_checks() {
     if [[ "${TOTAL_MEM_GB}" -le 16 ]]; then
         log_warn "16 GB RAM or less detected. Large builds (e.g. cuda/GPU)"
         log_warn "may fail or become very slow. Recommended: stage builds on"
-        log_warn "disk by re-running with: --build-dir ${HOME}/spack/tmp"
+        log_warn "disk by re-running with: --build-dir ${SPACK_DIR}/tmp"
     fi
     log_ok "RAM checks complete."
 }
@@ -691,15 +725,47 @@ mem_checks() {
 # ---------------------------------------------------------------------------
 # PREREQUISITE CHECK
 # ---------------------------------------------------------------------------
+params_equations() {
+    [[ -r "${SEISSOL_PARAMS_FILE}" ]] || return 0
+    awk -F'=' '{ sub(/#.*/, "") }
+        $1 ~ /^[[:space:]]*equations[[:space:]]*$/ { v = $2; gsub(/[[:space:]]/, "", v); print tolower(v) }' \
+        "${SEISSOL_PARAMS_FILE}" | tail -n 1
+}
+
 check_prerequisites() {
     log_section "Checking base prerequisites"
+
+    local probe="${SPACK_DIR}"
+    while [[ ! -e "${probe}" ]]; do probe=$(dirname "${probe}"); done
     local AVAIL_KB AVAIL_GB
-    AVAIL_KB=$(df --output=avail "${HOME}" 2>/dev/null | tail -1 || \
-               df "${HOME}" | tail -1 | awk '{print $4}')
+    AVAIL_KB=$(df --output=avail "${probe}" 2>/dev/null | tail -1 || \
+               df "${probe}" | tail -1 | awk '{print $4}')
     AVAIL_GB=$(( AVAIL_KB / 1024 / 1024 ))
-    log_info "Available disk space in ${HOME}: ~${AVAIL_GB} GB"
+    log_info "Available disk space for ${SPACK_DIR}: ~${AVAIL_GB} GB"
     if [[ "${AVAIL_GB}" -lt 30 ]]; then
         log_warn "Less than 30 GB free. Spack + SeisSol may need more."
+    fi
+
+    local required=(git gcc g++ make patch tar gzip bzip2 xz unzip python3 file)
+    [[ "${OFFLINE}" == "true" ]] || required+=(curl)
+    if [[ "$(params_equations)" == "poroelastic" && "${BUILD_GCC}" == "false" ]]; then
+        required+=(gfortran)
+    fi
+
+    local missing=() cmd
+    for cmd in "${required[@]}"; do
+        command -v "${cmd}" &>/dev/null || missing+=("${cmd}")
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        if [[ "${INSTALL_DEPS}" == "true" ]]; then
+            log_info "Missing commands: ${missing[*]}. Attempting to install via package manager."
+        else
+            log_error "Missing required commands: ${missing[*]}"
+            log_error "Re-run with --install-deps to install them (sudo option)"
+            log_error "or ask your system administrators."
+            die "Prerequisite check failed."
+        fi
     fi
     log_ok "Prerequisites OK."
 }
