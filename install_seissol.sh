@@ -16,6 +16,10 @@
 #  --no-spack-update    Use an existing Spack clone as is (no git fetch/pull)
 #  --no-shell-rc        Do not modify ~/.bashrc or ~/.zshrc
 #  --spack-env STR      Spack environment name (default: seissol-env)
+#  --packages-yaml FILE Site YAML configuration to be included in the Spack
+#                       environment
+#  --target TARGET      Pin the CPU microarchitecture for all packages
+#                       (e.g. zen4), independent of the build host
 #  --build-dir DIR      Build staging dir; sets TMPDIR to DIR
 #                       (default: system TMPDIR).
 #  --log FILE           Custom log file path
@@ -46,6 +50,8 @@ SPACK_UPDATE=true
 SHELL_RC_UPDATE=true
 OFFLINE=false
 SPEC_EXTRA=""
+PACKAGES_YAML=""
+TARGET=""
 SEISSOL_POROELASTIC=false   # auto set true when equations=poroelastic (seissol workaround)
 
 # Populated by GCC helper
@@ -85,6 +91,11 @@ die() { log_error "$*"; exit 1; }
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --params-file|-j|--jobs|--spack-dir|--spack-env|--packages-yaml|\
+            --target|--build-dir|--log|--spec-extra)
+                [[ $# -ge 2 ]] || die "$1 requires a value. Run with -h for help." ;;
+        esac
+        case "$1" in
             --params-file) SEISSOL_PARAMS_FILE="$2";                     shift 2 ;;
             --install-deps) INSTALL_DEPS=true;                           shift 1 ;;
             -j|--jobs)     JOBS="$2";                                    shift 2 ;;
@@ -92,6 +103,8 @@ parse_args() {
             --spack-env)   SPACK_ENV_NAME="$2";                          shift 2 ;;
             --no-spack-update) SPACK_UPDATE=false;                       shift 1 ;;
             --no-shell-rc) SHELL_RC_UPDATE=false;                        shift 1 ;;
+            --packages-yaml) PACKAGES_YAML="$2";                         shift 2 ;;
+            --target)      TARGET="$2";                                  shift 2 ;;
             --build-dir)   BUILD_TMPDIR="$2";                            shift 2 ;;
             --log)         LOG_FILE="$2";                                shift 2 ;;
             --gcc-14)      BUILD_GCC=true;                               shift 1 ;;
@@ -105,6 +118,18 @@ parse_args() {
 
 usage() {
     awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0"
+}
+
+validate_args() {
+    [[ -f "${SEISSOL_PARAMS_FILE}" && -r "${SEISSOL_PARAMS_FILE}" ]] || \
+        die "--params-file: file not found or not readable: ${SEISSOL_PARAMS_FILE}"
+    if [[ -n "${PACKAGES_YAML}" ]]; then
+        [[ -f "${PACKAGES_YAML}" && -r "${PACKAGES_YAML}" ]] || \
+            die "--packages-yaml: file not found or not readable: ${PACKAGES_YAML}"
+    fi
+    if [[ -n "${TARGET}" && ! "${TARGET}" =~ ^[A-Za-z0-9_]+$ ]]; then
+        die "--target: invalid target name '${TARGET}' (expected e.g. zen4, x86_64_v3)."
+    fi
 }
 
 # ===========================================================================
@@ -661,10 +686,51 @@ resolve_jobs() {
     log_info "Using ${JOBS} parallel jobs (from ${source})."
 }
 
+check_env_options() {
+    if [[ -n "${TARGET}" ]]; then
+        spack arch --known-targets 2>/dev/null | awk '/^ / { print $1 }' | grep -x -- "${TARGET}" >/dev/null || \
+            die "--target: '${TARGET}' is not a target known to Spack (see: spack arch --known-targets)."
+    fi
+
+    [[ -n "${PACKAGES_YAML}" ]] || return 0
+    # Avoiding spack failing if the packages file is not readable.
+    local scope_dir
+    scope_dir=$(mktemp -d)
+    cp "${PACKAGES_YAML}" "${scope_dir}/packages.yaml"
+    if ! spack -C "${scope_dir}" config get packages >/dev/null 2>>"${LOG_FILE}"; then
+        rm -rf "${scope_dir}"
+        die "Spack could not read your packages file: ${PACKAGES_YAML}. Check ${LOG_FILE} for errors."
+    fi
+    rm -rf "${scope_dir}"
+}
+
+configure_env() {
+    [[ -n "${PACKAGES_YAML}" || -n "${TARGET}" ]] || return 0
+    log_step "Configuring Spack environment '${SPACK_ENV_NAME}'"
+
+    if [[ -n "${PACKAGES_YAML}" ]]; then
+        local env_dir
+        env_dir=$(spack location -e "${SPACK_ENV_NAME}")
+        cp "${PACKAGES_YAML}" "${env_dir}/site-packages.yaml"
+        spack --env="${SPACK_ENV_NAME}" config add "include:[site-packages.yaml]" \
+            2>&1 | tee -a "${LOG_FILE}"
+        log_info "  Included ${PACKAGES_YAML} (copied to ${env_dir}/site-packages.yaml)"
+    fi
+
+    if [[ -n "${TARGET}" ]]; then
+        # Without host_compatible:false Spack rejects targets the build host cannot run.
+        spack --env="${SPACK_ENV_NAME}" config add "packages:all:require:'target=${TARGET}'" \
+            2>&1 | tee -a "${LOG_FILE}"
+        spack --env="${SPACK_ENV_NAME}" config add "concretizer:targets:host_compatible:false" \
+            2>&1 | tee -a "${LOG_FILE}"
+        log_info "  All packages will be built for target=${TARGET}"
+    fi
+}
+
 install_seissol() {
     log_section "Installing SeisSol via Spack"
 
-    resolve_jobs
+    check_env_options
 
     log_step "Creating Spack environment '${SPACK_ENV_NAME}'"
     if spack env list 2>/dev/null | grep -qE "^[*[:space:]]*${SPACK_ENV_NAME}$"; then
@@ -675,6 +741,8 @@ install_seissol() {
     spack env create "${SPACK_ENV_NAME}" 2>&1 | tee -a "${LOG_FILE}"
 
     spack env activate "${SPACK_ENV_NAME}" 2>&1
+
+    configure_env
 
     parse_seissol_config
 
@@ -782,6 +850,8 @@ main() {
     log_section "SeisSol Spack Installer"
     log_info "Log: ${LOG_FILE}"
 
+    validate_args
+    resolve_jobs
     resolve_gcc_helper_metadata
     confirm_with_user
     detect_os

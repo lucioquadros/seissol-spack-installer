@@ -1,0 +1,18 @@
+# Configuration for Santos Dumont (LNCC).
+# Use with:
+#   ./install_seissol.sh --packages-yaml sites/sdumont2nd/packages.yaml --target zen4 ...
+#
+# OBS:
+# Prefix and module were checked on a login node with `mpicc --show`.
+# To confirm them, run on a login node:
+#   module load openmpi/gnu/5.0.5.1.0
+#   spack external find --not-buildable openmpi
+packages:
+  mpi:
+    buildable: false
+  openmpi:
+    externals:
+    - spec: "openmpi@5.0.5.1.0+cuda~java+lustre~memchecker~rocm~static~wrapper-rpath fabrics=ucx schedulers=none"
+      prefix: /opt/mpi/openmpi/5.0.5.1.0
+      modules: [openmpi/gnu/5.0.5.1.0]
+    buildable: false
