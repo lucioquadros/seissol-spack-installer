@@ -814,7 +814,7 @@ check_prerequisites() {
         log_warn "Less than 30 GB free. Spack + SeisSol may need more."
     fi
 
-    local required=(git gcc g++ make patch tar gzip bzip2 xz unzip python3 file)
+    local required=(git gcc g++ patch tar gzip bzip2 xz unzip python3 file)
     [[ "${OFFLINE}" == "true" ]] || required+=(curl)
     if [[ "$(params_equations)" == "poroelastic" && "${BUILD_GCC}" == "false" ]]; then
         required+=(gfortran)
