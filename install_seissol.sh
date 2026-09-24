@@ -20,6 +20,10 @@
 #                       environment
 #  --target TARGET      Pin the CPU microarchitecture for all packages
 #                       (e.g. zen4), independent of the build host
+#  --fetch-only         Phase 1 of an offline install: concretize and download
+#                       all sources into the mirror, without building
+#  --mirror-dir DIR     Source mirror for offline installs
+#                       (default: <spack-dir>-mirror)
 #  --build-dir DIR      Build staging dir; sets TMPDIR to DIR
 #                       (default: system TMPDIR).
 #  --log FILE           Custom log file path
@@ -52,6 +56,11 @@ OFFLINE=false
 SPEC_EXTRA=""
 PACKAGES_YAML=""
 TARGET=""
+FETCH_ONLY=false
+MIRROR_DIR=""               # empty = <SPACK_DIR>-mirror
+MIRROR_NAME="seissol-installer"
+FETCH_MARKER=".seissol-installer-fetch"
+BUILTIN_REPO_DIR=""
 SEISSOL_POROELASTIC=false   # auto set true when equations=poroelastic (seissol workaround)
 
 # Populated by GCC helper
@@ -92,7 +101,7 @@ parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --params-file|-j|--jobs|--spack-dir|--spack-env|--packages-yaml|\
-            --target|--build-dir|--log|--spec-extra)
+            --target|--mirror-dir|--build-dir|--log|--spec-extra)
                 [[ $# -ge 2 ]] || die "$1 requires a value. Run with -h for help." ;;
         esac
         case "$1" in
@@ -105,6 +114,8 @@ parse_args() {
             --no-shell-rc) SHELL_RC_UPDATE=false;                        shift 1 ;;
             --packages-yaml) PACKAGES_YAML="$2";                         shift 2 ;;
             --target)      TARGET="$2";                                  shift 2 ;;
+            --fetch-only)  FETCH_ONLY=true;                              shift 1 ;;
+            --mirror-dir)  MIRROR_DIR="$2";                              shift 2 ;;
             --build-dir)   BUILD_TMPDIR="$2";                            shift 2 ;;
             --log)         LOG_FILE="$2";                                shift 2 ;;
             --gcc-14)      BUILD_GCC=true;                               shift 1 ;;
@@ -130,6 +141,10 @@ validate_args() {
     if [[ -n "${TARGET}" && ! "${TARGET}" =~ ^[A-Za-z0-9_]+$ ]]; then
         die "--target: invalid target name '${TARGET}' (expected e.g. zen4, x86_64_v3)."
     fi
+    if [[ -n "${MIRROR_DIR}" && "${FETCH_ONLY}" == "false" ]]; then
+        die "--mirror-dir is only used together with --fetch-only."
+    fi
+    MIRROR_DIR="${MIRROR_DIR:-${SPACK_DIR}-mirror}"
 }
 
 # ===========================================================================
@@ -166,6 +181,10 @@ confirm_with_user() {
     echo -e "      and in the hidden folder ${BOLD}~/.spack${NC}."
     echo -e "      Everything under these folders are self-contained and can"
     echo -e "      be removed at any time with: rm -rf ${SPACK_DIR} ~/.spack"
+    if [[ "${FETCH_ONLY}" == "true" ]]; then
+        echo -e "      ${BOLD}${YELLOW}[--fetch-only]${NC} Nothing is built: all sources are"
+        echo -e "      downloaded to ${BOLD}${MIRROR_DIR}${NC}."
+    fi
     if [[ "${SHELL_RC_UPDATE}" == "true" ]]; then
         echo -e "   6. Append a Spack activation line to ${BOLD}~/.bashrc${NC} or ${BOLD}~/.zshrc${NC}"
         echo -e "      so that Spack is available in new shells after installation."
@@ -727,11 +746,7 @@ configure_env() {
     fi
 }
 
-install_seissol() {
-    log_section "Installing SeisSol via Spack"
-
-    check_env_options
-
+recreate_env() {
     log_step "Creating Spack environment '${SPACK_ENV_NAME}'"
     if spack env list 2>/dev/null | grep -qE "^[*[:space:]]*${SPACK_ENV_NAME}$"; then
         log_info "  Removing '${SPACK_ENV_NAME}', if it fails, deactivate it first:"
@@ -741,6 +756,14 @@ install_seissol() {
     spack env create "${SPACK_ENV_NAME}" 2>&1 | tee -a "${LOG_FILE}"
 
     spack env activate "${SPACK_ENV_NAME}" 2>&1
+}
+
+install_seissol() {
+    log_section "Installing SeisSol via Spack"
+
+    check_env_options
+
+    recreate_env
 
     configure_env
 
@@ -759,6 +782,155 @@ install_seissol() {
 }
 
 # ===========================================================================
+# OFFLINE PHASE 1: FETCH SOURCES
+# ===========================================================================
+prepare_offline_assets() {
+    log_step "Preparing Spack for offline use"
+    spack bootstrap now 2>&1 | tee -a "${LOG_FILE}"
+    BUILTIN_REPO_DIR=$(spack location --repo builtin 2>>"${LOG_FILE}") || \
+        die "Could not locate Spack's builtin package repository - see ${LOG_FILE}"
+    log_info "  Concretizer bootstrap: $(spack bootstrap root)"
+    log_info "  Builtin package repository: ${BUILTIN_REPO_DIR}"
+}
+
+env_marker() {
+    echo "$(spack location -e "${SPACK_ENV_NAME}")/${FETCH_MARKER}"
+}
+
+marker_value() {
+    sed -n "s/^$1=//p" "$(env_marker)" 2>/dev/null | head -n 1
+}
+
+packages_yaml_sum() {
+    if [[ -n "${PACKAGES_YAML}" ]]; then
+        sha256sum "${PACKAGES_YAML}" | awk '{ print $1 }'
+    else
+        echo "none"
+    fi
+}
+
+write_marker() {
+    local marker
+    marker=$(env_marker)
+    {
+        echo "status=$1"
+        echo "date=$(date '+%Y-%m-%d %H:%M:%S')"
+        echo "spack_version=$(spack --version)"
+        echo "spec=${SEISSOL_SPEC}"
+        echo "target=${TARGET}"
+        echo "packages_yaml_sha256=$(packages_yaml_sum)"
+        echo "mirror_dir=${MIRROR_DIR}"
+        echo "builtin_repo=${BUILTIN_REPO_DIR}"
+    } > "${marker}.tmp"
+    mv "${marker}.tmp" "${marker}"
+}
+
+can_reuse_env() {
+    spack env list 2>/dev/null | grep -qE "^[*[:space:]]*${SPACK_ENV_NAME}$" || return 1
+    [[ -f "$(spack location -e "${SPACK_ENV_NAME}")/spack.lock" && -f "$(env_marker)" ]] || return 1
+    [[ "$(marker_value spec)" == "${SEISSOL_SPEC}" \
+       && "$(marker_value target)" == "${TARGET}" \
+       && "$(marker_value packages_yaml_sha256)" == "$(packages_yaml_sum)" \
+       && "$(marker_value spack_version)" == "$(spack --version)" ]]
+}
+
+check_cacheable() {
+    log_step "Checking that every source can be stored in the mirror"
+    local script bad
+    script=$(mktemp --suffix=.py)
+    cat > "${script}" <<'EOF'
+import spack.environment as ev
+import spack.fetch_strategy as fs
+
+for spec in ev.active_environment().all_specs():
+    if spec.external or not spec.package.has_code:
+        continue
+    if not fs.for_package_version(spec.package).cachable:
+        print(spec.format("{name}@{version}"))
+EOF
+    if ! bad=$(spack --env="${SPACK_ENV_NAME}" python "${script}" 2>>"${LOG_FILE}"); then
+        rm -f "${script}"
+        die "Could not check the concretized specs - see ${LOG_FILE}"
+    fi
+    rm -f "${script}"
+
+    if [[ -n "${bad}" ]]; then
+        log_error "These versions cannot be stored in a mirror (no fixed commit or checksum):"
+        local line
+        while IFS= read -r line; do log_error "  ${line}"; done <<< "${bad}"
+        if grep -q '^seissol@' <<< "${bad}"; then
+            log_error "Pin SeisSol to a commit in the params file, e.g.:"
+            log_error "  version = git.<40-char-sha>=master"
+        fi
+        die "These packages cannot be installed offline."
+    fi
+    log_ok "  All sources can be mirrored."
+}
+
+add_env_mirror() {
+    if spack --env="${SPACK_ENV_NAME}" mirror list 2>/dev/null | awk '{ print $1 }' \
+            | grep -x -- "${MIRROR_NAME}" >/dev/null; then
+        spack --env="${SPACK_ENV_NAME}" mirror remove "${MIRROR_NAME}" 2>&1 | tee -a "${LOG_FILE}"
+    fi
+    spack --env="${SPACK_ENV_NAME}" mirror add --type source "${MIRROR_NAME}" "file://${MIRROR_DIR}" \
+        2>&1 | tee -a "${LOG_FILE}"
+    log_info "  Environment uses mirror '${MIRROR_NAME}': file://${MIRROR_DIR}"
+}
+
+create_mirror() {
+    log_step "Downloading all sources into ${MIRROR_DIR}"
+    local workers=$(( JOBS < 8 ? JOBS : 8 ))
+    local out rc=0 failed
+    out=$(mktemp)
+    spack --env="${SPACK_ENV_NAME}" mirror create -d "${MIRROR_DIR}" --all --private -j "${workers}" \
+        2>&1 | tee -a "${LOG_FILE}" "${out}" || rc=$?
+    failed=$(awk '/^ *[0-9]+ +failed to fetch/ { print $1 }' "${out}")
+
+    if [[ ${rc} -ne 0 || "${failed:-unknown}" != "0" ]]; then
+        log_error "Mirror creation failed (exit code ${rc}, failed downloads: ${failed:-unknown}):"
+        local line
+        while IFS= read -r line; do log_error "  ${line}"; done \
+            < <(awk 'found && NF == 1 { print $1 } /^ *[0-9]+ +failed to fetch/ { found = 1 }' "${out}")
+        rm -f "${out}"
+        die "Re-run the same command to retry. Sources already downloaded are kept."
+    fi
+    log_ok "  Mirror complete: $(awk '/^ *[0-9]+ +already present/ { p = $1 } /^ *[0-9]+ +added/ { a = $1 }
+        END { print p " already present, " a " added" }' "${out}")"
+    rm -f "${out}"
+}
+
+fetch_sources() {
+    log_section "Fetching SeisSol sources for an offline install"
+
+    check_env_options
+    mkdir -p "${MIRROR_DIR}"
+    MIRROR_DIR=$(realpath "${MIRROR_DIR}")
+    prepare_offline_assets
+    parse_seissol_config
+
+    if can_reuse_env; then
+        log_info "Reusing the concretized environment '${SPACK_ENV_NAME}'"
+        log_info "(same spec, target, packages.yaml and Spack version as the previous run)."
+        spack env activate "${SPACK_ENV_NAME}" 2>&1
+        write_marker concretized
+        ensure_poroelastic_lapack
+    else
+        recreate_env
+        configure_env
+        ensure_poroelastic_lapack
+        spack add "${SEISSOL_SPEC}" 2>&1 | tee -a "${LOG_FILE}"
+        log_step "Concretizing the environment"
+        spack concretize 2>&1 | tee -a "${LOG_FILE}"
+        write_marker concretized
+    fi
+
+    check_cacheable
+    add_env_mirror
+    create_mirror
+    write_marker fetched
+}
+
+# ===========================================================================
 # POST-INSTALL REPORT
 # ===========================================================================
 print_summary() {
@@ -771,6 +943,36 @@ print_summary() {
     log_info "  source ${SPACK_DIR}/share/spack/setup-env.sh"
     log_info "  spack env activate ${SPACK_ENV_NAME}"
     log_ok "Done. Bye."
+}
+
+print_fetch_summary() {
+    log_section "Fetch Summary"
+    log_info "Spack location  : ${SPACK_DIR}"
+    log_info "Spack env       : ${SPACK_ENV_NAME}"
+    log_info "Source mirror   : ${MIRROR_DIR}"
+    log_info "Log file        : ${LOG_FILE}"
+    log_info ""
+    local cmd
+    cmd="$(realpath "$0") --offline -y --no-shell-rc"
+    cmd+=" --spack-dir $(printf '%q' "$(realpath "${SPACK_DIR}")")"
+    cmd+=" --spack-env $(printf '%q' "${SPACK_ENV_NAME}")"
+    cmd+=" --mirror-dir $(printf '%q' "${MIRROR_DIR}")"
+    cmd+=" --params-file $(printf '%q' "$(realpath "${SEISSOL_PARAMS_FILE}")")"
+    [[ -n "${SPEC_EXTRA}" ]] && cmd+=" --spec-extra $(printf '%q' "${SPEC_EXTRA}")"
+    log_info "Next step: build without internet (e.g. in a batch job) with:"
+    log_info "  ${cmd}"
+    log_info "On Santos Dumont, submit sites/sdumont2nd/build_seissol.sbatch instead."
+    if [[ -z "${TARGET}" ]]; then
+        log_warn "No --target given: packages are pinned to this machine's CPU ($(spack arch --target))."
+        log_warn "Pass --target if the offline build runs on a different CPU."
+    fi
+    local var
+    for var in SPACK_USER_CACHE_PATH SPACK_USER_CONFIG_PATH; do
+        if [[ -n "${!var:-}" ]]; then
+            log_info "Keep ${var}=${!var} for the offline build."
+        fi
+    done
+    log_ok "Sources fetched."
 }
 
 # ===========================================================================
@@ -859,8 +1061,13 @@ main() {
     mem_checks
     install_packages
     setup_spack
-    install_seissol
-    print_summary
+    if [[ "${FETCH_ONLY}" == "true" ]]; then
+        fetch_sources
+        print_fetch_summary
+    else
+        install_seissol
+        print_summary
+    fi
 }
 
 main "$@"
