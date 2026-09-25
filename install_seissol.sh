@@ -22,6 +22,8 @@
 #                       (e.g. zen4), independent of the build host
 #  --fetch-only         Phase 1 of an offline install: concretize and download
 #                       all sources into the mirror, without building
+#  --offline            Phase 2 of an offline install: build from the mirror
+#                       and lockfile of phase 1, without network access
 #  --mirror-dir DIR     Source mirror for offline installs
 #                       (default: <spack-dir>-mirror)
 #  --build-dir DIR      Build staging dir; sets TMPDIR to DIR
@@ -46,6 +48,7 @@ JOBS=""                     # empty = auto-detect
 LOG_FILE="${HOME}/seissol_install_$(date +%Y%m%d_%H%M%S).log"
 SPACK_BRANCH="releases/v1.1"
 SEISSOL_PARAMS_FILE="seissol_params.conf"
+PARAMS_FILE_SET=false
 BUILD_GCC=false
 GCC_V=""
 AUTO_YES=false
@@ -105,23 +108,24 @@ parse_args() {
                 [[ $# -ge 2 ]] || die "$1 requires a value. Run with -h for help." ;;
         esac
         case "$1" in
-            --params-file) SEISSOL_PARAMS_FILE="$2";                     shift 2 ;;
-            --install-deps) INSTALL_DEPS=true;                           shift 1 ;;
-            -j|--jobs)     JOBS="$2";                                    shift 2 ;;
-            --spack-dir)   SPACK_DIR="$2";                               shift 2 ;;
-            --spack-env)   SPACK_ENV_NAME="$2";                          shift 2 ;;
-            --no-spack-update) SPACK_UPDATE=false;                       shift 1 ;;
-            --no-shell-rc) SHELL_RC_UPDATE=false;                        shift 1 ;;
-            --packages-yaml) PACKAGES_YAML="$2";                         shift 2 ;;
-            --target)      TARGET="$2";                                  shift 2 ;;
-            --fetch-only)  FETCH_ONLY=true;                              shift 1 ;;
-            --mirror-dir)  MIRROR_DIR="$2";                              shift 2 ;;
-            --build-dir)   BUILD_TMPDIR="$2";                            shift 2 ;;
-            --log)         LOG_FILE="$2";                                shift 2 ;;
-            --gcc-14)      BUILD_GCC=true;                               shift 1 ;;
-            --spec-extra)  SPEC_EXTRA="${SPEC_EXTRA:+${SPEC_EXTRA} }$2"; shift 2 ;;
-            -y|--yes)      AUTO_YES=true;                                shift 1 ;;
-            -h|--help)     usage; exit 0 ;;
+            --params-file) SEISSOL_PARAMS_FILE="$2"; PARAMS_FILE_SET=true; shift 2 ;;
+            --install-deps) INSTALL_DEPS=true;                             shift 1 ;;
+            -j|--jobs)     JOBS="$2";                                      shift 2 ;;
+            --spack-dir)   SPACK_DIR="$2";                                 shift 2 ;;
+            --spack-env)   SPACK_ENV_NAME="$2";                            shift 2 ;;
+            --no-spack-update) SPACK_UPDATE=false;                         shift 1 ;;
+            --no-shell-rc) SHELL_RC_UPDATE=false;                          shift 1 ;;
+            --packages-yaml) PACKAGES_YAML="$2";                           shift 2 ;;
+            --target)      TARGET="$2";                                    shift 2 ;;
+            --fetch-only)  FETCH_ONLY=true;                                shift 1 ;;
+            --offline)     OFFLINE=true;                                   shift 1 ;;
+            --mirror-dir)  MIRROR_DIR="$2";                                shift 2 ;;
+            --build-dir)   BUILD_TMPDIR="$2";                              shift 2 ;;
+            --log)         LOG_FILE="$2";                                  shift 2 ;;
+            --gcc-14)      BUILD_GCC=true;                                 shift 1 ;;
+            --spec-extra)  SPEC_EXTRA="${SPEC_EXTRA:+${SPEC_EXTRA} }$2";   shift 2 ;;
+            -y|--yes)      AUTO_YES=true;                                  shift 1 ;;
+            -h|--help)     usage; exit 0 ;;  
             *) die "Unknown option: $1. Run with -h for help." ;;
         esac
     done
@@ -132,8 +136,27 @@ usage() {
 }
 
 validate_args() {
-    [[ -f "${SEISSOL_PARAMS_FILE}" && -r "${SEISSOL_PARAMS_FILE}" ]] || \
-        die "--params-file: file not found or not readable: ${SEISSOL_PARAMS_FILE}"
+    if [[ "${FETCH_ONLY}" == "true" && "${OFFLINE}" == "true" ]]; then
+        die "--fetch-only and --offline are separate phases. Use one at a time."
+    fi
+    if [[ "${OFFLINE}" == "true" ]]; then
+        local phase1_only=()
+        [[ "${INSTALL_DEPS}" == "false" ]] || phase1_only+=(--install-deps)
+        [[ -z "${PACKAGES_YAML}" ]] || phase1_only+=(--packages-yaml)
+        [[ -z "${TARGET}" ]] || phase1_only+=(--target)
+        [[ "${BUILD_GCC}" == "false" ]] || phase1_only+=(--gcc-14)
+        if [[ ${#phase1_only[@]} -gt 0 ]]; then
+            die "--offline cannot be combined with ${phase1_only[*]} (these belong to phase 1, --fetch-only)."
+        fi
+        if [[ -n "${SPEC_EXTRA}" && "${PARAMS_FILE_SET}" == "false" ]]; then
+            die "With --offline, --spec-extra is only used together with --params-file."
+        fi
+        SPACK_UPDATE=false
+    fi
+    if [[ "${OFFLINE}" == "false" || "${PARAMS_FILE_SET}" == "true" ]]; then
+        [[ -f "${SEISSOL_PARAMS_FILE}" && -r "${SEISSOL_PARAMS_FILE}" ]] || \
+            die "--params-file: file not found or not readable: ${SEISSOL_PARAMS_FILE}"
+    fi
     if [[ -n "${PACKAGES_YAML}" ]]; then
         [[ -f "${PACKAGES_YAML}" && -r "${PACKAGES_YAML}" ]] || \
             die "--packages-yaml: file not found or not readable: ${PACKAGES_YAML}"
@@ -141,10 +164,12 @@ validate_args() {
     if [[ -n "${TARGET}" && ! "${TARGET}" =~ ^[A-Za-z0-9_]+$ ]]; then
         die "--target: invalid target name '${TARGET}' (expected e.g. zen4, x86_64_v3)."
     fi
-    if [[ -n "${MIRROR_DIR}" && "${FETCH_ONLY}" == "false" ]]; then
-        die "--mirror-dir is only used together with --fetch-only."
+    if [[ -n "${MIRROR_DIR}" && "${FETCH_ONLY}" == "false" && "${OFFLINE}" == "false" ]]; then
+        die "--mirror-dir is only used together with --fetch-only or --offline."
     fi
-    MIRROR_DIR="${MIRROR_DIR:-${SPACK_DIR}-mirror}"
+    if [[ "${FETCH_ONLY}" == "true" ]]; then
+        MIRROR_DIR="${MIRROR_DIR:-${SPACK_DIR}-mirror}"
+    fi
 }
 
 # ===========================================================================
@@ -184,6 +209,10 @@ confirm_with_user() {
     if [[ "${FETCH_ONLY}" == "true" ]]; then
         echo -e "      ${BOLD}${YELLOW}[--fetch-only]${NC} Nothing is built: all sources are"
         echo -e "      downloaded to ${BOLD}${MIRROR_DIR}${NC}."
+    fi
+    if [[ "${OFFLINE}" == "true" ]]; then
+        echo -e "      ${BOLD}${YELLOW}[--offline]${NC} Nothing is downloaded (phase 2): SeisSol is built from"
+        echo -e "      the sources and lockfile prepared by --fetch-only in phase 1."
     fi
     if [[ "${SHELL_RC_UPDATE}" == "true" ]]; then
         echo -e "   6. Append a Spack activation line to ${BOLD}~/.bashrc${NC} or ${BOLD}~/.zshrc${NC}"
@@ -308,7 +337,7 @@ resolve_gcc_helper_metadata() {
 DEBIAN_PKGS=(
     file bzip2 ca-certificates
     g++ gcc gfortran
-    git gzip lsb-release patch
+    git gzip lsb-release patch diffutils
     python3 python3-dev
     tar unzip xz-utils zstd
     wget curl patchelf zlib1g-dev
@@ -317,7 +346,7 @@ DEBIAN_PKGS=(
 RHEL_PKGS=(
     file bzip2 ca-certificates
     gcc gcc-c++ gcc-gfortran
-    git gzip patch which
+    git gzip patch diffutils which
     python3 python3-devel
     tar unzip xz zstd
     wget curl patchelf zlib-static
@@ -326,7 +355,7 @@ RHEL_PKGS=(
 SUSE_PKGS=(
     file bzip2 ca-certificates
     gcc gcc-c++ gcc-fortran
-    git gzip lsb-release patch
+    git gzip lsb-release patch diffutils
     python3 python3-devel
     tar unzip xz zstd wget curl which
     patchelf zlib-devel-static zlib-devel
@@ -334,11 +363,21 @@ SUSE_PKGS=(
 
 ARCH_PKGS=(
     base-devel gcc-fortran
-    git bzip2 lsb-release
+    git bzip2 lsb-release diffutils
     python which
     tar unzip xz zstd
     wget curl patchelf zlib
 )
+
+# Minimal RHEL-family images ship curl-minimal, which conflicts with the curl package.
+# Skip curl if curl-minimal exists.
+rhel_packages() {
+    local pkg
+    for pkg in "${RHEL_PKGS[@]}"; do
+        if [[ "${pkg}" == "curl" ]] && command -v curl &>/dev/null; then continue; fi
+        echo "${pkg}"
+    done
+}
 
 install_packages() {
     if [[ "${INSTALL_DEPS}" == "false" ]]; then
@@ -385,7 +424,9 @@ install_packages() {
             else
                 ${SUDO} dnf groupinstall -y "Development Tools" 2>&1 | tee -a "${LOG_FILE}"
             fi
-            ${SUDO} dnf install -y "${RHEL_PKGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
+            local -a RPM_PKGS
+            mapfile -t RPM_PKGS < <(rhel_packages)
+            ${SUDO} dnf install -y "${RPM_PKGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
             ;;
 
         fedora)
@@ -401,7 +442,9 @@ install_packages() {
             else
                 ${SUDO} dnf groupinstall -y "Development Tools" 2>&1 | tee -a "${LOG_FILE}"
             fi
-            ${SUDO} dnf install -y "${RHEL_PKGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
+            local -a RPM_PKGS
+            mapfile -t RPM_PKGS < <(rhel_packages)
+            ${SUDO} dnf install -y "${RPM_PKGS[@]}" 2>&1 | tee -a "${LOG_FILE}"
             ;;
 
         suse)
@@ -435,6 +478,8 @@ setup_spack() {
         git -C "${SPACK_DIR}" pull --ff-only \
             2>&1 | tee -a "${LOG_FILE}"
     else
+        [[ "${OFFLINE}" == "false" ]] || \
+            die "No Spack clone at ${SPACK_DIR}. Run phase 1 (--fetch-only) with the same --spack-dir first."
         log_step "Cloning Spack (branch: ${SPACK_BRANCH})"
         git clone --branch "${SPACK_BRANCH}" \
             https://github.com/spack/spack.git "${SPACK_DIR}" \
@@ -469,6 +514,12 @@ setup_spack() {
         log_info "Adding Spack init to ${SHELL_RC}"
         { echo ""; echo "# Spack - added by install_seissol.sh"; \
           echo "${SPACK_INIT_LINE}"; } >> "${SHELL_RC}"
+    fi
+
+    if [[ "${OFFLINE}" == "true" ]]; then
+        log_info "Skipping compiler detection (--offline): the compiler is recorded in the lockfile."
+        log_ok "Spack is ready."
+        return 0
     fi
 
     # Compiler detection
@@ -778,7 +829,8 @@ install_seissol() {
         --jobs "${JOBS}" \
         --fail-fast \
         --yes-to-all \
-        2>&1 | tee -a "${LOG_FILE}"
+        2>&1 | tee -a "${LOG_FILE}" \
+        || die "Spack install failed. See the errors above and ${LOG_FILE}"
 }
 
 # ===========================================================================
@@ -817,6 +869,7 @@ write_marker() {
         echo "date=$(date '+%Y-%m-%d %H:%M:%S')"
         echo "spack_version=$(spack --version)"
         echo "spec=${SEISSOL_SPEC}"
+        echo "gcc_pin=${GCC_V}"
         echo "target=${TARGET}"
         echo "packages_yaml_sha256=$(packages_yaml_sum)"
         echo "mirror_dir=${MIRROR_DIR}"
@@ -931,6 +984,86 @@ fetch_sources() {
 }
 
 # ===========================================================================
+# OFFLINE PHASE 2: BUILD FROM THE MIRROR
+# ===========================================================================
+check_offline_env() {
+    log_step "Checking the environment prepared in phase 1"
+    local rerun="Run phase 1 (--fetch-only) on a machine with internet access first."
+
+    spack env list 2>/dev/null | grep -qE "^[*[:space:]]*${SPACK_ENV_NAME}$" || \
+        die "Spack environment '${SPACK_ENV_NAME}' not found in ${SPACK_DIR}. ${rerun}"
+    local env_dir
+    env_dir=$(spack location -e "${SPACK_ENV_NAME}")
+    [[ -f "${env_dir}/spack.lock" ]] || die "No spack.lock in ${env_dir}. ${rerun}"
+    [[ -f "${env_dir}/${FETCH_MARKER}" ]] || \
+        die "Environment '${SPACK_ENV_NAME}' was not prepared by --fetch-only. ${rerun}"
+    local status
+    status=$(marker_value status)
+    [[ "${status}" == "fetched" ]] || \
+        die "Phase 1 did not finish downloading (status: ${status:-unknown}). Re-run --fetch-only."
+    [[ "$(marker_value spack_version)" == "$(spack --version)" ]] || \
+        die "Spack changed since phase 1 (version: $(marker_value spack_version)). Re-run --fetch-only."
+
+    local mirror
+    mirror=$(marker_value mirror_dir)
+    if [[ -n "${MIRROR_DIR}" && "$(realpath -m "${MIRROR_DIR}")" != "${mirror}" ]]; then
+        die "--mirror-dir ${MIRROR_DIR} is not the mirror used in phase 1 (${mirror})."
+    fi
+    [[ -d "${mirror}/_source-cache" ]] || die "Source mirror not found at ${mirror}."
+    MIRROR_DIR="${mirror}"
+
+    # Without its package repository, Spack tries to clone it again from GitHub.
+    local repo cache
+    repo=$(marker_value builtin_repo)
+    cache=$(realpath -m "${SPACK_USER_CACHE_PATH:-${HOME}/.spack}")
+    if [[ ! -d "${repo}" || "$(realpath -m "${repo}")" != "${cache}"/* ]]; then
+        die "Spack's package repository from phase 1 (${repo:-unknown}) is not in ${cache}. Use the same SPACK_USER_CACHE_PATH as in phase 1."
+    fi
+    log_ok "  Environment, lockfile, mirror and package repository found."
+}
+
+check_offline_spec() {
+    local recorded
+    recorded=$(marker_value spec)
+    [[ "${recorded,,}" != *equations=poroelastic* ]] || SEISSOL_POROELASTIC=true
+
+    if [[ "${PARAMS_FILE_SET}" == "false" ]]; then
+        log_info "Building the spec prepared in phase 1: ${recorded}"
+        return 0
+    fi
+    GCC_V=$(marker_value gcc_pin)
+    parse_seissol_config
+    if [[ "${SEISSOL_SPEC}" != "${recorded}" ]]; then
+        log_error "The params file gives a different spec than phase 1:"
+        log_error "  phase 1: ${recorded}"
+        log_error "  now:     ${SEISSOL_SPEC}"
+        die "Re-run phase 1 (--fetch-only) with this params file."
+    fi
+}
+
+build_offline() {
+    log_section "Building SeisSol offline"
+
+    check_offline_env
+    check_offline_spec
+    if [[ "${SEISSOL_POROELASTIC}" == "true" ]] && ! command -v gfortran &>/dev/null; then
+        die "gfortran is required for poroelastic builds but was not found."
+    fi
+
+    spack env activate "${SPACK_ENV_NAME}" 2>&1
+    ensure_poroelastic_lapack
+
+    log_step "Installing SeisSol from ${MIRROR_DIR} (this will take a while, follow ${LOG_FILE} for progress)"
+    # A short timeout makes an unexpected download attempt fail quickly instead of hanging.
+    spack -c config:connect_timeout:5 install \
+        --jobs "${JOBS}" \
+        --fail-fast \
+        --yes-to-all \
+        2>&1 | tee -a "${LOG_FILE}" \
+        || die "Spack install failed. See the errors above and ${LOG_FILE}"
+}
+
+# ===========================================================================
 # POST-INSTALL REPORT
 # ===========================================================================
 print_summary() {
@@ -942,6 +1075,9 @@ print_summary() {
     log_info "To use SeisSol:"
     log_info "  source ${SPACK_DIR}/share/spack/setup-env.sh"
     log_info "  spack env activate ${SPACK_ENV_NAME}"
+    if [[ "${OFFLINE}" == "true" ]]; then
+        log_info "[HPC] Use the same two lines in batch scripts, after loading any modules."
+    fi
     log_ok "Done. Bye."
 }
 
@@ -1016,7 +1152,7 @@ check_prerequisites() {
         log_warn "Less than 30 GB free. Spack + SeisSol may need more."
     fi
 
-    local required=(git gcc g++ patch tar gzip bzip2 xz unzip python3 file)
+    local required=(git gcc g++ patch diff tar gzip bzip2 xz unzip python3 file)
     [[ "${OFFLINE}" == "true" ]] || required+=(curl)
     if [[ "$(params_equations)" == "poroelastic" && "${BUILD_GCC}" == "false" ]]; then
         required+=(gfortran)
@@ -1064,6 +1200,9 @@ main() {
     if [[ "${FETCH_ONLY}" == "true" ]]; then
         fetch_sources
         print_fetch_summary
+    elif [[ "${OFFLINE}" == "true" ]]; then
+        build_offline
+        print_summary
     else
         install_seissol
         print_summary
