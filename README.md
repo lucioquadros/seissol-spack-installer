@@ -27,6 +27,7 @@ through a configuration file that mirrors SeisSol's own build parameters.
 - [Installation Options](#installation-options)
 - [Build Parameter File](#build-parameter-file)
 - [Example Configurations](#example-configurations)
+- [Offline / HPC Clusters](#offline--hpc-clusters)
 - [License](#license)
 
 ---
@@ -45,6 +46,9 @@ The installer aims to automate SeisSol installation via Spack:
 
 All output is logged to a timestamped file in `$HOME` for later inspection.
 
+On clusters whose compute nodes have no internet access, the installer can split this into a download phase and an offline build phase; see
+[Offline / HPC Clusters](#offline--hpc-clusters).
+
 ---
 
 ## Prerequisites
@@ -57,6 +61,8 @@ All output is logged to a timestamped file in `$HOME` for later inspection.
 | awk | - | 
 | Free disk space | ~30 GB | 
 | RAM | ~16 GB | 
+
+The installer also checks for the other tools Spack needs (git, gcc, g++, patch, diff, tar, gzip, bzip2, xz, unzip, python3, file, curl, and gfortran for poroelastic builds) and lists any that are missing.
 
 > **Low-RAM / GPU builds note:** on machines with 16 GB of RAM or less, large
 > builds can be a problem, e.g. a "cuda = true" build. If you have problems,
@@ -115,18 +121,31 @@ Usage: ./install_seissol.sh [OPTIONS]
 Options:
  --params-file FILE   SeisSol build-parameter file
                       (default: seissol_params.conf in the script directory)
- --install-deps       Install system dependencies for Spack via the OS package
-                      manager (apt / dnf / zypper / pacman)
- -j, --jobs N         Parallel build jobs (default: nproc − 1)
+ --install-deps       Install system dependencies for Spack via the OS
+                      package manager.
+ -j, --jobs N         Parallel build jobs (default: SLURM_CPUS_PER_TASK if
+                      set, otherwise nproc − 1)
  --spack-dir DIR      Where to clone or find Spack (default: ~/spack)
+ --no-spack-update    Use an existing Spack clone as is (no git fetch/pull)
+ --no-shell-rc        Do not modify ~/.bashrc or ~/.zshrc
  --spack-env STR      Spack environment name (default: seissol-env)
- --build-dir DIR      Build staging directory; sets TMPDIR to DIR.
-                      (default: system TMPDIR)
+ --packages-yaml FILE Site [HPC] YAML configuration to be included in
+                      the Spack environment
+ --target TARGET      Pin the CPU microarchitecture for all packages
+                      (e.g. zen4), independent of the build host
+ --fetch-only         Phase 1 of an offline install: concretize and download
+                      all sources into the mirror, without building
+ --offline            Phase 2 of an offline install: build from the mirror
+                      and lockfile of phase 1, without network access
+ --mirror-dir DIR     Source mirror for offline installs
+                      (default: <spack-dir>-mirror)
+ --build-dir DIR      Build staging dir; sets TMPDIR to DIR
+                      (default: system TMPDIR).
  --log FILE           Custom log file path
                       (default: ~/seissol_install_YYYYMMDD_HHMMSS.log)
  --gcc-14             Build gcc-14 from source / export it to PATH
- --spec-extra SPEC    Extra Spack spec constraints appended to the SeisSol spec.
-                      Repeatable. E.g. --spec-extra "^cuda@12".
+ --spec-extra SPEC    Extra Spack spec constraints appended to the SeisSol
+                      spec (repeatable).
  -y, --yes            Skip the confirmation prompt
  -h, --help           Show usage and exit
 ```
@@ -159,6 +178,16 @@ Options:
 
 # Append extra Spack spec constraints (repeatable).
 ./install_seissol.sh --spec-extra "^cuda@12" --spec-extra "^netcdf-c@4.9:"
+
+# Keep the current Spack clone and leave ~/.bashrc / ~/.zshrc untouched
+./install_seissol.sh --no-spack-update --no-shell-rc
+
+# Use site [HPC] packages and build for a given CPU type
+./install_seissol.sh --packages-yaml my_site/packages.yaml --target zen4
+
+# Offline install in two phases (see "Offline / HPC Clusters")
+./install_seissol.sh --fetch-only --packages-yaml my_site/packages.yaml --target zen4 # phase 1
+./install_seissol.sh --offline -y --no-shell-rc # phase 2
 
 ```
 
@@ -200,6 +229,40 @@ Full parameter reference:
 The `conf_examples/` directory holds examples of parameter files for
 SeisSol builds. Point `--params-file` at one (or copy it to
 `seissol_params.conf`) and edit as needed.
+
+---
+
+## Offline / HPC Clusters
+
+On clusters where compute nodes have no internet access, run the installer in
+two phases:
+
+1. **`--fetch-only`**, on a machine with internet access (e.g. a login node):
+   sets up Spack, resolves all versions into a lockfile and downloads every
+   source into a mirror (`--mirror-dir`, default `<spack-dir>-mirror`). Nothing
+   is built. It prints the exact command for phase 2.
+2. **`--offline`**, on the compute node (e.g. in a batch job): checks that
+   phase 1 finished and builds SeisSol from the lockfile and the mirror,
+   without any network access.
+
+```bash
+# Phase 1 (with internet)
+./install_seissol.sh --fetch-only -y --no-shell-rc \
+    --spack-dir /path/to/spack --params-file my_params.conf \
+    --packages-yaml my_site/packages.yaml --target zen4
+
+# Phase 2 (without internet), same --spack-dir, --spack-env and mirror
+./install_seissol.sh --offline -y --no-shell-rc \
+    --spack-dir /path/to/spack --params-file my_params.conf
+```
+
+- Both phases must see the same `SPACK_USER_CACHE_PATH` (default `~/.spack`),
+  where Spack keeps its package recipes.
+- Re-running phase 1 reuses the lockfile if nothing changed and downloads only
+  missing sources.
+
+A complete guide for the Santos Dumont 2nd supercomputer (LNCC), with a batch
+script for phase 2, is in [sites/sdumont2nd/README.md](sites/sdumont2nd/README.md).
 
 ---
 
