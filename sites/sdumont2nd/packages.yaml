@@ -16,3 +16,7 @@ packages:
       prefix: /opt/mpi/openmpi/5.0.5.1.0
       modules: [openmpi/gnu/5.0.5.1.0]
     buildable: false
+  asagi:
+    # CMake cannot find MPI's Fortran support in SDumont's OpenMPI, and SeisSol
+    # and easi only use ASAGI's C/C++ interface, so we skip it.
+    variants: "~fortran"

@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=32
-#SBATCH --time=04:00:00
+#SBATCH --time=01:30:00
 #SBATCH --output=seissol-build-%j.out
 #SBATCH --error=seissol-build-%j.err
 #

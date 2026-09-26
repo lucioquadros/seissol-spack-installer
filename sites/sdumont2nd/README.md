@@ -132,7 +132,9 @@ squeue -u $USER
 tail -f seissol-build-<jobid>.out
 ```
 
-The job runs on one `cpu_amd` node with 32 cores for up to 4 hours.
+The job runs on one `cpu_amd` node with 32 cores for up to 1.5 hours. A full build
+is expected to take about 45-50 minutes; if the limit is ever reached, submit the
+job again to continue.
 
 It writes `seissol-build-<jobid>.out`, `.err` and `.log` to the folder you
 submitted from.
